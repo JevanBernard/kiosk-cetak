@@ -132,16 +132,6 @@
 .k-linked b { font-size: 1.5rem; font-weight: 800; }
 .k-linked p { color: var(--k-muted); font-weight: 500; }
 
-.k-phone { max-width: 20rem; padding: 1rem; text-align: center; display: flex; flex-direction: column; align-items: center; }
-.k-phone-body { width: 7rem; height: 11rem; border-radius: 1rem; background: var(--k-highest); padding: .5rem; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-shadow: inset 0 2px 4px rgba(0, 0, 0, .06); }
-.k-phone-body .slit { width: 2rem; height: .25rem; border-radius: 999px; background: rgba(67, 70, 85, .4); }
-.k-phone-body .home { width: 2.5rem; height: .25rem; border-radius: 999px; background: rgba(67, 70, 85, .4); }
-.k-phone-screen { width: 100%; height: 8rem; border-radius: .75rem; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: .5rem; position: relative; overflow: hidden; }
-.k-phone-screen .ic { width: 4rem; height: 4rem; border-radius: .5rem; background: var(--k-primary-fixed); color: var(--k-primary); display: grid; place-items: center; margin-bottom: .25rem; animation: k-pulse 2s ease-in-out infinite; }
-.k-phone-screen span { font-size: .625rem; font-weight: 700; color: var(--k-primary); letter-spacing: .04em; line-height: 1; }
-.k-phone-screen .beam { position: absolute; left: 0; right: 0; top: 1rem; height: 2px; background: var(--k-cyan); box-shadow: 0 0 8px #57dffe; animation: k-bounce 1s infinite; }
-.k-phone h3 { margin: .5rem 0 0; font-size: .75rem; font-weight: 600; letter-spacing: .02em; }
-.k-phone p { font-size: .75rem; color: var(--k-muted); }
 
 .k-privacy { display: flex; align-items: center; gap: 1rem; padding: .5rem 1rem; border-radius: .75rem; background: var(--k-low); }
 .k-privacy .ic { width: 2rem; height: 2rem; border-radius: 50%; background: var(--k-tertiary-c); color: var(--k-on-tertiary-c); display: grid; place-items: center; flex: none; }
@@ -295,5 +285,36 @@
 @media (max-width: 1279px), (max-aspect-ratio: 1/1) {
   .k-draft { grid-template-columns: 1fr; }
   .k-dleft { position: static; }
-  .k-preview { max-height: 60vh; }
+  .k-preview { max-height: 34vh; min-height: 16rem; }
+  .k-empty { min-height: 14rem; }
 }
+
+/* Bar bayar menempel di bawah: tombol Bayar selalu terlihat tanpa scroll */
+.k-draft { margin-bottom: 0; }
+.k-paybar { position: sticky; bottom: 1rem; z-index: 5; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 1.5rem; }
+.k-paysum { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; }
+.k-paysum-t small { display: block; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--k-muted); }
+.k-paysum-t b { font-size: 2.25rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+.k-paysum-n { flex: 1; min-width: 12rem; }
+.k-paybar .k-btn { width: auto; }
+.k-paybar .k-paybtn.primary { min-width: 18rem; }
+.k-paybar .k-confirm { flex: 0 1 auto; flex-wrap: nowrap; }
+.k-paybar .k-confirm span { flex: 0 1 auto; }
+.k-dright { gap: 1rem; }
+.k-dright .k-panel { padding: 1.25rem; gap: .75rem; }
+.k-og { gap: .75rem; }
+.k-seg button { min-height: 3.25rem; }
+.k-step-in button { min-height: 3.25rem; }
+@media (max-width: 1279px), (max-aspect-ratio: 1/1) {
+  .k-paybar { flex-wrap: wrap; }
+  .k-paybar .k-paybtn.primary { flex: 1 1 100%; }
+}
+
+/* Layar QRIS: QR di kiri, info bayar di kanan, tanpa scroll di 1080p */
+.k-center.wide { max-width: 72rem; gap: 1rem; }
+.k-title.pay { font-size: clamp(2rem, 3.6vw, 3rem); }
+.k-payrow .k-qr, .k-payrow .k-qr-ph { width: clamp(14rem, 26vw, 19rem); }
+.k-payrow { gap: 3rem; flex-wrap: nowrap; }
+.k-payinfo { flex: 1; max-width: 30rem; }
+@media (max-aspect-ratio: 1/1) { .k-payrow { flex-wrap: wrap; } .k-payrow .k-qr, .k-payrow .k-qr-ph { width: clamp(16rem, 60vw, 26rem); } }
+.k-center .k-done { max-width: 24rem; min-height: 4.5rem; font-size: 1.5rem; }

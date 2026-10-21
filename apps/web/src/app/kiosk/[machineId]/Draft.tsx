@@ -128,30 +128,32 @@ export function DraftScreen({
             <OptionsCard key={active.id} file={active} config={config} caps={caps} call={call} report={report} refresh={p.refresh} onOpts={(o) => setLive((m) => ({ ...m, [active.id]: o }))} />
           )}
 
-          <section className="k-card k-panel k-sum">
-            <div className="k-panel-h"><h2>Ringkasan Biaya</h2></div>
-            {files.filter((f) => f.price !== null).map((f) => (
-              <div className="k-line" key={f.id}><span>{f.name}</span><b className="k-num">{formatRupiah(f.price!)}</b></div>
-            ))}
-            {!!view && view.totals.rounding > 0 && <div className="k-line mut"><span>Pembulatan</span><b className="k-num">{formatRupiah(view.totals.rounding)}</b></div>}
-            <div className="k-line tot"><span>Total</span><b className="k-num">{formatRupiah(total)}</b></div>
-            {view?.ready && <div className="k-hint">Perkiraan waktu cetak: {Math.max(1, Math.round(view.estimateSeconds / 60))} menit</div>}
-            {tooLow && <div className="k-err">Total minimal {formatRupiah(view!.minTotal)}. Tambah halaman atau salinan.</div>}
-            {payErr && <div className="k-err">{payErr}</div>}
-            <button className="k-btn primary" disabled={!canPay} onClick={pay}>{paying ? "Menyiapkan QRIS..." : `Bayar ${formatRupiah(total)}`}</button>
-            <div className="k-hint">Harga dikunci saat QRIS muncul. Anda punya 5 menit untuk membayar dari HP.</div>
-            {!confirmCancel ? (
-              <button className="k-btn ghost" onClick={() => setConfirmCancel(true)}>Batalkan</button>
-            ) : (
-              <div className="k-confirm">
-                <span>Batalkan dan hapus dokumen?</span>
-                <button className="k-btn danger" onClick={onCancel}>Ya, batalkan</button>
-                <button className="k-btn ghost" onClick={() => setConfirmCancel(false)}>Tidak</button>
-              </div>
-            )}
-          </section>
         </div>
       </div>
+      <section className="k-card md k-paybar">
+        <div className="k-paysum">
+          <div className="k-paysum-t">
+            <small>Total ({files.filter((f) => f.price !== null).length} dokumen{view && view.totals.rounding > 0 ? `, termasuk pembulatan ${formatRupiah(view.totals.rounding)}` : ""})</small>
+            <b className="k-num">{formatRupiah(total)}</b>
+          </div>
+          <div className="k-paysum-n">
+            {tooLow && <span className="k-err">Total minimal {formatRupiah(view!.minTotal)}. Tambah halaman atau salinan.</span>}
+            {payErr && <span className="k-err">{payErr}</span>}
+            {!tooLow && !payErr && view?.ready && <span className="k-hint">Perkiraan cetak {Math.max(1, Math.round(view.estimateSeconds / 60))} menit. Harga dikunci saat QRIS muncul; waktu bayar 5 menit.</span>}
+            {!view?.ready && <span className="k-hint">Menunggu dokumen siap diproses...</span>}
+          </div>
+        </div>
+        {!confirmCancel ? (
+          <button className="k-btn ghost k-paybtn" onClick={() => setConfirmCancel(true)}>Batalkan</button>
+        ) : (
+          <div className="k-confirm">
+            <span>Batalkan dan hapus dokumen?</span>
+            <button className="k-btn danger" onClick={onCancel}>Ya, batalkan</button>
+            <button className="k-btn ghost" onClick={() => setConfirmCancel(false)}>Tidak</button>
+          </div>
+        )}
+        <button className="k-btn primary k-paybtn" disabled={!canPay} onClick={pay}>{paying ? "Menyiapkan QRIS..." : `Bayar ${formatRupiah(total)}`}</button>
+      </section>
     </main>
   );
 }
@@ -174,9 +176,31 @@ function OptionsCard({
   const duplexOk = config.allow_duplex && caps.duplex;
   const nups = config.allow_nup ? NUP_VALUES : [1 as const];
 
+  const pending = useRef<PrintOptions | null>(null); // perubahan yang belum terkirim ke server
+
+  async function save(next: PrintOptions) {
+    pending.current = null;
+    try {
+      await call(`/files/${file.id}`, { method: "PUT", json: next });
+      await refresh();
+      report(file.id, "ok");
+    } catch {
+      report(file.id, "invalid");
+    }
+  }
+
+  // Berpindah file saat perubahan masih tertunda: kirim sekarang agar tidak hilang dan tombol Bayar tetap terkunci sampai tersimpan.
   useEffect(() => {
-    report(file.id, "ok");
-    return () => report(file.id, "ok");
+    report(file.id, "ok"); // dibuka ulang dari nilai server yang valid
+    return () => {
+      clearTimeout(timer.current);
+      if (pending.current) {
+        report(file.id, "saving");
+        void save(pending.current);
+      } else {
+        report(file.id, "ok"); // perubahan tak valid dibuang, server masih memegang nilai valid terakhir
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file.id]);
 
@@ -185,20 +209,14 @@ function OptionsCard({
     setO(next);
     onOpts(next);
     clearTimeout(timer.current);
+    pending.current = null;
     if ("error" in priceFile(next, file.pages!, config)) {
       report(file.id, "invalid");
       return;
     }
     report(file.id, "saving");
-    timer.current = setTimeout(async () => {
-      try {
-        await call(`/files/${file.id}`, { method: "PUT", json: next });
-        await refresh();
-        report(file.id, "ok");
-      } catch {
-        report(file.id, "invalid");
-      }
-    }, 350);
+    pending.current = next;
+    timer.current = setTimeout(() => save(next), 350);
   }
 
   const seg = (on: boolean, label: string, click: () => void, disabled = false) => (
@@ -249,8 +267,8 @@ export function PayScreen({
   const mock = qrString?.startsWith("MOCKQRIS");
   return (
     <main className="k-main">
-      <div className="k-center">
-        <h1 className="k-title">Scan <em>QRIS</em> untuk membayar</h1>
+      <div className="k-center wide">
+        <h1 className="k-title pay">Scan <em>QRIS</em> untuk membayar</h1>
         <div className="k-payrow">
           <div className="k-qrwrap">{img ? <img className="k-qr" src={img} alt="QRIS pembayaran" /> : <div className="k-qr-ph">Menyiapkan QRIS...</div>}</div>
           <div className="k-payinfo">

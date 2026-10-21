@@ -69,9 +69,11 @@ export default function KioskPage({ params }: { params: { machineId: string } })
   const [qrImg, setQrImg] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [dismissed, setDismissed] = useState<string | null>(null); // kode transaksi yang layar "Selesai"-nya sudah ditutup
 
-  const [key, setKey] = useState("");
+  const [keyRaw, setKey] = useState<string | null>(null); // null = belum dibaca dari URL
   useEffect(() => setKey(new URLSearchParams(window.location.search).get("k") ?? ""), []);
+  const key = keyRaw ?? "";
 
   const refresh = useCallback(async () => {
     try {
@@ -86,11 +88,11 @@ export default function KioskPage({ params }: { params: { machineId: string } })
   }, [params.machineId, key]);
 
   useEffect(() => {
-    if (!key) return;
+    if (keyRaw === null) return;
     refresh();
     const t = setInterval(refresh, 2000);
     return () => clearInterval(t);
-  }, [refresh, key]);
+  }, [refresh, keyRaw]);
 
   async function cancel() {
     await fetch(`/api/kiosk/${params.machineId}/cancel?k=${encodeURIComponent(key)}`, { method: "POST" }).catch(() => {});
@@ -210,13 +212,15 @@ export default function KioskPage({ params }: { params: { machineId: string } })
       </>,
     ));
   }
-  if (s.finished) {
+  if (s.finished && s.finished.code !== dismissed) {
     return shell(center(
       <>
         <div className="k-hero-icon ok"><Icon d={ICONS.check} size={56} /></div>
         <h1 className="k-title">Selesai! <em>Ambil dokumen</em> di nampan</h1>
         <p className="k-sub">Kode transaksi</p>
         <div className="k-card md k-code k-num">{s.finished.code}</div>
+        <button className="k-btn primary k-done" onClick={() => setDismissed(s.finished!.code)}>Selesai</button>
+        <p className="k-sub" style={{ fontSize: "1rem" }}>Layar kembali otomatis dalam beberapa detik.</p>
       </>,
     ));
   }
@@ -330,19 +334,6 @@ export default function KioskPage({ params }: { params: { machineId: string } })
                 <div className="k-bar"><i style={{ width: `${rotPct}%` }} /></div>
                 <div className="t"><span>Refresh Otomatis</span><span>Siklus {KIOSK_TOKEN_ROTATE_SECONDS} Detik</span></div>
               </div>
-            </div>
-            <div className="k-phone">
-              <div className="k-phone-body">
-                <div className="slit" />
-                <div className="k-phone-screen">
-                  <div className="ic"><Icon d={ICONS.scan} size={32} /></div>
-                  <span>Terkoneksi aman</span>
-                  <div className="beam" />
-                </div>
-                <div className="home" />
-              </div>
-              <h3>Scan langsung dengan Kamera</h3>
-              <p>Mendukung kamera bawaan iOS, Android &amp; Chrome</p>
             </div>
           </div>
 

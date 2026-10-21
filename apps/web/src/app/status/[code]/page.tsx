@@ -2,12 +2,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatRupiah } from "@kioskcetak/shared";
 import { ApiError, STATUS_LABEL, api } from "@/lib/client";
+import { I, MIcon, Shell, Stepper, useToast } from "../../mobile/ui";
 
 type Status = {
   order: { code: string; status: string; total: number; created_at: string; paid_at: string | null; printed_at: string | null };
   files: { name: string; pages: number | null; sides: number | null; price: number | null; options: any }[];
   totals: { subtotal: number; total: number; rounding: number };
-  machine: { name: string; location: string | null } | null;
+  machine: { name: string; code?: string | null; location: string | null } | null;
   whatsapp: string | null;
   refund: { status: string; kind: string; amount: number } | null;
   payment: { provider: string; status: string } | null;
@@ -23,6 +24,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
   const [name, setName] = useState("");
   const [dest, setDest] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [toast, showToast] = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -52,80 +54,145 @@ export default function StatusPage({ params }: { params: { code: string } }) {
     }
   }
 
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(code);
+      showToast("Kode transaksi disalin!");
+    } catch {
+      showToast(`Kode transaksi: ${code}`);
+    }
+  }
+
+  async function share() {
+    const text = `Struk KioskCetak ${code}${s ? ` · ${formatRupiah(s.order.total || s.totals.total)}` : ""}`;
+    if (navigator.share) {
+      await navigator.share({ title: `Struk KioskCetak ${code}`, text, url: window.location.href }).catch(() => {});
+    } else {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        showToast("Tautan struk disalin!");
+      } catch {
+        showToast("Salin tautan dari bilah alamat.");
+      }
+    }
+  }
+
   if (err) {
     return (
-      <main className="wrap stack">
-        <h1>Status transaksi</h1>
-        <div className="banner bad">{err}</div>
-        <a href="/">Kembali</a>
-      </main>
+      <Shell tag="Status">
+        <div className="m-card m-live bad">
+          <div className="m-live-in">
+            <div className="ic"><MIcon d={I.alert} size={22} /></div>
+            <div><div className="k">Tidak ditemukan</div><h2>Status transaksi</h2><p>{err}</p></div>
+          </div>
+        </div>
+        <a className="m-btn soft block" href="/">Kembali</a>
+      </Shell>
     );
   }
-  if (!s) return <main className="wrap"><p className="muted">Memuat...</p></main>;
+  if (!s) {
+    return (
+      <Shell tag="Status">
+        <div className="m-card m-stack m-center" style={{ padding: "2rem" }}><span className="m-spin" /><p className="m-sm">Memuat...</p></div>
+      </Shell>
+    );
+  }
 
   const st = s.order.status;
-  const wa = s.whatsapp ? `https://wa.me/${s.whatsapp}?text=${encodeURIComponent(`Halo, saya mau lapor masalah cetak. Kode transaksi: ${s.order.code}`)}` : null;
   const paid = s.order.paid_at !== null;
+  const wa = s.whatsapp ? `https://wa.me/${s.whatsapp}?text=${encodeURIComponent(`Halo, saya mau lapor masalah cetak. Kode transaksi: ${s.order.code}`)}` : null;
+  const step = st === "SELESAI" ? 5 : ["LUNAS", "MENCETAK", "CETAK_ULANG", "MENUNGGU_REFUND", "GAGAL_CETAK"].includes(st) ? 4 : st === "MENUNGGU_BAYAR" ? 3 : FINAL.includes(st) ? 1 : 2;
+  const bad = ["MENUNGGU_REFUND", "GAGAL_CETAK"].includes(st);
+  const machine = s.machine ? { name: s.machine.name, code: s.machine.code ?? null, location: s.machine.location } : null;
+  const live = st === "SELESAI" || st === "DIREFUND"
+    ? { c: "ok", i: I.checkCircle, k: "Selesai", h: STATUS_LABEL[st], p: st === "SELESAI" ? "Dokumen sudah tercetak. Ambil di nampan mesin." : "Dana sudah dikembalikan." }
+    : bad
+      ? { c: "bad", i: I.alert, k: "Perlu tindakan", h: STATUS_LABEL[st], p: "Maaf atas kendalanya. Lihat bagian pengembalian dana di bawah." }
+      : ["LUNAS", "MENCETAK", "CETAK_ULANG"].includes(st)
+        ? { c: "", i: I.sync, k: "Status langsung", h: STATUS_LABEL[st], p: "Sedang diproses. Halaman ini diperbarui otomatis." }
+        : st === "MENUNGGU_BAYAR"
+          ? { c: "plain", i: I.hourglass, k: "Menunggu pembayaran", h: STATUS_LABEL[st], p: "Scan QRIS yang tampil di layar mesin dengan aplikasi e-wallet atau m-banking." }
+          : { c: "plain", i: I.info, k: "Status", h: STATUS_LABEL[st] ?? st, p: "Halaman ini diperbarui otomatis." };
 
   return (
-    <main className="wrap stack">
-      <div className="hide-print"><a href="/">KioskCetak</a></div>
-      <div className="card receipt stack">
-        <div className="row between">
-          <h1 style={{ margin: 0 }}>{paid ? "Struk" : "Status"}</h1>
-          <span className={`pill ${st === "SELESAI" || st === "DIREFUND" ? "ok" : ["MENUNGGU_REFUND", "GAGAL_CETAK"].includes(st) ? "bad" : "warn"}`}>{STATUS_LABEL[st] ?? st}</span>
+    <Shell tag={paid ? "Struk" : "Status"} machine={machine}>
+      <div className="m-hide-print"><Stepper step={step} /></div>
+
+      <div className={`m-card m-live ${live.c}`}>
+        <div className="m-live-in">
+          <div className={`ic${live.c === "" ? " spin" : ""}`}><MIcon d={live.i} size={22} /></div>
+          <div><div className="k">{live.k}</div><h2>{live.h}</h2><p>{live.p}</p></div>
         </div>
-        <div className="muted">Kode transaksi</div>
-        <div className="big">{s.order.code}</div>
-        <div className="muted">
-          {s.machine?.name}{s.machine?.location ? ` · ${s.machine.location}` : ""}<br />
-          Dibuat: {fmt(s.order.created_at)}<br />
-          {paid && <>Dibayar: {fmt(s.order.paid_at)} ({s.payment?.provider === "mock" ? "simulasi" : "QRIS"})<br /></>}
-          {s.order.printed_at && <>Tercetak: {fmt(s.order.printed_at)}</>}
-        </div>
-        <table>
-          <thead><tr><th>File</th><th>Sisi</th><th style={{ textAlign: "right" }}>Harga</th></tr></thead>
-          <tbody>
-            {s.files.map((f, i) => (
-              <tr key={i}>
-                <td>{f.name}<div className="muted">{f.pages ?? "?"} hal · {f.options?.color ? "warna" : "hitam-putih"} · {f.options?.duplex ? "bolak-balik" : "1 sisi"} · ×{f.options?.copies ?? 1}</div></td>
-                <td>{f.sides ?? "-"}</td>
-                <td style={{ textAlign: "right" }} className="price">{f.price !== null ? formatRupiah(f.price) : "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {s.totals.rounding > 0 && <div className="row between muted"><span>Pembulatan</span><span>{formatRupiah(s.totals.rounding)}</span></div>}
-        <div className="row between"><b>Total</b><b className="price">{formatRupiah(s.order.total || s.totals.total)}</b></div>
-        <div className="muted">Isi dokumen tidak disimpan dan tidak ditampilkan di sini.</div>
       </div>
 
-      {st === "SELESAI" && <div className="banner ok">Dokumen sudah tercetak. Ambil di nampan mesin.</div>}
-      {["LUNAS", "MENCETAK", "CETAK_ULANG"].includes(st) && <div className="banner">Sedang diproses. Halaman ini diperbarui otomatis.</div>}
-      {st === "MENUNGGU_BAYAR" && <div className="banner warn">Menunggu pembayaran. Scan QRIS yang tampil di layar mesin dengan aplikasi e-wallet atau m-banking.</div>}
+      <div className="m-card md m-stack">
+        <div className="m-row">
+          <div className="m-lab m-row" style={{ justifyContent: "flex-start", gap: ".5rem" }}><MIcon d={I.receipt} size={22} />Struk Transaksi Digital</div>
+          {paid && <span className="m-badge fix">Lunas</span>}
+        </div>
+        <div className="m-meta">
+          <div className="r">
+            <span>Kode Transaksi:</span>
+            <div><span className="m-code">{s.order.code}</span><button className="m-mini m-hide-print" onClick={copyCode} title="Salin kode" aria-label="Salin kode"><MIcon d={I.copy} size={14} /></button></div>
+          </div>
+          <div className="r"><span>Dibuat:</span><span>{fmt(s.order.created_at)}</span></div>
+          {paid && <div className="r"><span>Dibayar:</span><span>{fmt(s.order.paid_at)} ({s.payment?.provider === "mock" ? "simulasi" : "QRIS"})</span></div>}
+          {s.order.printed_at && <div className="r"><span>Tercetak:</span><span>{fmt(s.order.printed_at)}</span></div>}
+          <div className="r"><span>Kiosk Terminal:</span><span>{s.machine ? `${s.machine.code ? `#${s.machine.code} ` : ""}${s.machine.name}${s.machine.location ? ` (${s.machine.location})` : ""}` : "-"}</span></div>
+        </div>
+
+        <div className="m-rows">
+          {s.files.map((f, i) => (
+            <div key={i} className="m-line">
+              <div className="a">
+                <div>
+                  <b>{f.name}</b>
+                  <span>{f.pages ?? "?"} hal · {f.sides ?? "-"} sisi · {f.options?.color ? "warna" : "hitam-putih"} · {f.options?.duplex ? "bolak-balik" : "1 sisi"} · ×{f.options?.copies ?? 1}</span>
+                </div>
+              </div>
+              <span className="p m-num">{f.price !== null ? formatRupiah(f.price) : "-"}</span>
+            </div>
+          ))}
+          {s.totals.rounding > 0 && <div className="m-line m-sm"><span>Pembulatan</span><span className="m-num">{formatRupiah(s.totals.rounding)}</span></div>}
+        </div>
+        <div className="m-meta"><div className="r tot"><span style={{ color: "var(--m-ink)", fontWeight: 600 }}>Total {paid ? "Terbayar" : "Tagihan"}:</span><b className="m-num" style={{ fontSize: 20, color: "var(--m-primary)" }}>{formatRupiah(s.order.total || s.totals.total)}</b></div></div>
+        <p className="m-sm">Isi dokumen tidak disimpan dan tidak ditampilkan di sini.</p>
+
+        {paid && (
+          <div className="m-two m-hide-print">
+            <button className="m-btn soft" onClick={() => window.print()}><MIcon d={I.download} size={18} />Unduh Struk</button>
+            <button className="m-btn soft" onClick={share}><MIcon d={I.share} size={18} />Bagikan</button>
+          </div>
+        )}
+      </div>
 
       {(st === "MENUNGGU_REFUND" || s.refund) && s.refund && (
-        <div className="card stack hide-print">
-          <h2>Pengembalian dana</h2>
+        <div className="m-card m-stack m-hide-print">
+          <div className="m-h2">Pengembalian dana</div>
           {s.refund.status === "needs_info" && (
-            <form className="stack" onSubmit={submitRefund}>
-              <p>Maaf atas kendalanya. Isi data berikut agar admin bisa mentransfer {formatRupiah(s.refund.amount)}. Data hanya dipakai untuk refund dan dihapus setelah 6 bulan.</p>
-              <div className="field"><label>Nama pemilik rekening/e-wallet</label><input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} /></div>
-              <div className="field"><label>Tujuan transfer (contoh: DANA 0812xxxx / BCA 1234xxxx)</label><input value={dest} onChange={(e) => setDest(e.target.value)} required minLength={5} /></div>
-              <button className="primary block" type="submit">Kirim</button>
+            <form className="m-stack m-form" onSubmit={submitRefund}>
+              <p className="m-sm">Maaf atas kendalanya. Isi data berikut agar admin bisa mentransfer <b>{formatRupiah(s.refund.amount)}</b>. Data hanya dipakai untuk refund dan dihapus setelah 6 bulan.</p>
+              <div><label>Nama pemilik rekening/e-wallet</label><input className="m-input" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} /></div>
+              <div><label>Tujuan transfer (contoh: DANA 0812xxxx / BCA 1234xxxx)</label><input className="m-input" value={dest} onChange={(e) => setDest(e.target.value)} required minLength={5} /></div>
+              <button className="m-btn block" type="submit">Kirim</button>
             </form>
           )}
-          {s.refund.status === "pending" && <div className="banner">Data diterima. Admin akan mentransfer {formatRupiah(s.refund.amount)} (target &lt; 24 jam).</div>}
-          {s.refund.status === "done" && <div className="banner ok">Dana {formatRupiah(s.refund.amount)} sudah ditransfer{s.refund.kind === "partial" ? " (refund sebagian)" : ""}.</div>}
-          {s.refund.status === "cancelled" && <div className="banner ok">Dokumenmu dicetak ulang oleh admin.</div>}
-          {msg && <div className="muted">{msg}</div>}
+          {s.refund.status === "pending" && <p className="m-sm">Data diterima. Admin akan mentransfer {formatRupiah(s.refund.amount)} (target &lt; 24 jam).</p>}
+          {s.refund.status === "done" && <p className="m-sm">Dana {formatRupiah(s.refund.amount)} sudah ditransfer{s.refund.kind === "partial" ? " (refund sebagian)" : ""}.</p>}
+          {s.refund.status === "cancelled" && <p className="m-sm">Dokumenmu dicetak ulang oleh admin.</p>}
+          {msg && <p className="m-sm"><b>{msg}</b></p>}
         </div>
       )}
 
-      <div className="row hide-print">
-        {paid && <button onClick={() => window.print()}>Unduh nota (PDF)</button>}
-        {wa && <a className="btn" href={wa} target="_blank" rel="noreferrer">Laporkan masalah</a>}
+      <div className="m-card m-stack m-hide-print">
+        <div className="m-privacy">
+          <div className="ic"><MIcon d={I.help} size={18} /></div>
+          <div><b>Ada kendala kertas macet atau hasil bermasalah?</b><p>Hubungi admin dan sebutkan kode transaksi di atas.</p></div>
+        </div>
+        {wa && <a className="m-btn wa block" href={wa} target="_blank" rel="noreferrer"><MIcon d={I.chat} size={18} />Laporkan Masalah via WhatsApp Admin</a>}
       </div>
-    </main>
+      <div className="m-links m-hide-print"><a href="/">KioskCetak</a></div>
+      {toast}
+    </Shell>
   );
 }

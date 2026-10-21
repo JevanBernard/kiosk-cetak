@@ -51,7 +51,7 @@ export const GET = handler(async (req: Request, { params }: { params: { machineI
     }
   }
   const drafting = !!order && DRAFT.includes(order.status);
-  const since = new Date(Date.now() - 45_000).toISOString();
+  const since = new Date(Date.now() - 20_000).toISOString();
   const { data: finished } = await db().from("orders").select("code, printed_at").eq("machine_id", machine.id).eq("status", "SELESAI").gt("printed_at", since).order("printed_at", { ascending: false }).limit(1).maybeSingle();
 
   const seen = new Date(Date.now() - 60_000).toISOString();

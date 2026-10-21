@@ -18,7 +18,7 @@ export const GET = handler(async (req: Request, { params }: { params: { code: st
   const id = await byCode(params.code.toUpperCase());
   const view = await buildOrderView(id);
   if (!view) throw new HttpError(404, "Kode transaksi tidak ditemukan.");
-  const { data: machine } = await db().from("machines").select("name, location").eq("id", view.order.machine_id).single();
+  const { data: machine } = await db().from("machines").select("*").eq("id", view.order.machine_id).single();
   const { data: settings } = await db().from("machine_settings").select("admin_whatsapp").eq("machine_id", view.order.machine_id).single();
   const { data: refund } = await db().from("refunds").select("status, kind, amount, done_at").eq("order_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle();
   const { data: payment } = await db().from("payments").select("provider, status").eq("order_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle();
@@ -26,7 +26,7 @@ export const GET = handler(async (req: Request, { params }: { params: { code: st
     order: view.order,
     files: view.files.map((f) => ({ name: f.name, pages: f.pages, sides: f.sides, price: f.price, options: f.options })),
     totals: view.totals,
-    machine,
+    machine: machine && { name: machine.name, code: machine.code ?? null, location: machine.location },
     whatsapp: settings?.admin_whatsapp ?? null,
     refund,
     payment,
