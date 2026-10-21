@@ -1,0 +1,11 @@
+{
+  "name": "kioskcetak",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @kioskcetak/web",
+    "build": "npm run build -w @kioskcetak/web",
+    "agent": "npm run start -w @kioskcetak/agent",
+    "test": "npm test -w @kioskcetak/shared"
+  }
+}

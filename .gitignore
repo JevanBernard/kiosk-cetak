@@ -1,0 +1,7 @@
+node_modules
+.next
+.env
+.env.local
+apps/agent/data
+apps/agent/.env
+*.log
