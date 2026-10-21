@@ -145,6 +145,8 @@ export async function startPayment(order: Record<string, any>) {
     return { qrString: qr.qrString, amount: view.totals.total, expiresAt: expiresAt.toISOString(), code: order.code as string };
   } catch (e) {
     console.error("[pay]", e);
+    // Alasan sebenarnya dicatat di riwayat order (bukan ke layar pengguna) supaya mudah didiagnosis.
+    await logEvent(order.id, "QR_FAILED", String((e as Error)?.message ?? e).slice(0, 300));
     await releaseMachine(machine.id, order.id);
     throw new HttpError(502, "Gagal membuat QR pembayaran. Coba lagi.");
   }

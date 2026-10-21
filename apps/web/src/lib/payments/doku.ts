@@ -31,7 +31,19 @@ const sha256Hex = (s: string) => createHash("sha256").update(s).digest("hex");
 
 let cached: { token: string; exp: number } | null = null;
 
+/** Gagal lebih awal dengan pesan jelas (hanya NAMA variabel, tidak pernah nilainya) bila konfigurasi DOKU belum lengkap. */
+function assertConfigured() {
+  const missing: string[] = [];
+  if (!CLIENT_ID()) missing.push("DOKU_CLIENT_ID");
+  if (!SECRET()) missing.push("DOKU_SECRET_KEY");
+  if (!MERCHANT_ID()) missing.push("DOKU_MERCHANT_ID");
+  if (!PRIVATE_KEY()) missing.push("DOKU_PRIVATE_KEY");
+  else if (!/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(PRIVATE_KEY())) missing.push("DOKU_PRIVATE_KEY (format bukan PEM; baris baru harus ditulis \n)");
+  if (missing.length) throw new Error(`Konfigurasi DOKU belum lengkap: ${missing.join(", ")}`);
+}
+
 async function accessToken(): Promise<string> {
+  assertConfigured();
   if (cached && cached.exp > Date.now() + 30_000) return cached.token;
   const timestamp = wib();
   const signature = createSign("RSA-SHA256").update(`${CLIENT_ID()}|${timestamp}`).sign(PRIVATE_KEY(), "base64");
