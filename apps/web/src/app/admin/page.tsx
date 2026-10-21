@@ -1,29 +1,37 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { formatRupiah } from "@kioskcetak/shared";
-import { ApiError, STATUS_LABEL, api } from "@/lib/client";
+import { ApiError, api } from "@/lib/client";
+import { Brand } from "../brand";
+import Logs from "./Logs";
+import Monitoring from "./Monitoring";
+import Pricing from "./Pricing";
+import Reports from "./Reports";
+import Tickets from "./Tickets";
+import { A, AIcon, fmt, jakarta, useToast, type Overview } from "./ui";
 
-type Machine = any;
-type Overview = {
-  machines: Machine[];
-  today: { orders: number; revenue: number };
-  active: any[];
-  refunds: any[];
-  alerts: any[];
-  lastTick: string | null;
-};
-
-const TABS = ["Ringkasan", "Tindakan", "Transaksi", "Laporan", "Pengaturan"] as const;
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" }) : "-");
+const NAV = [
+  { key: "dashboard", label: "Dashboard & Monitoring", icon: A.grid },
+  { key: "riwayat", label: "Riwayat & Laporan", icon: A.receipt },
+  { key: "tiket", label: "Antrean & Tiket", icon: A.ticket },
+  { key: "harga", label: "Pengaturan & Harga", icon: A.tune },
+  { key: "log", label: "Log Sistem", icon: A.terminal },
+] as const;
+type Tab = (typeof NAV)[number]["key"];
 
 export default function AdminPage() {
   const [ov, setOv] = useState<Overview | null>(null);
   const [needLogin, setNeedLogin] = useState(false);
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Ringkasan");
+  const [tab, setTab] = useState<Tab>("dashboard");
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
+  const [toast, showToast] = useToast();
 
   const load = useCallback(async () => {
     try {
       setOv(await api<Overview>("/api/admin/overview"));
+      setLoadedAt(Date.now());
       setNeedLogin(false);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) setNeedLogin(true);
@@ -37,31 +45,82 @@ export default function AdminPage() {
   }, [load]);
 
   if (needLogin) return <Login onDone={load} />;
-  if (!ov) return <main className="wrap"><p className="muted">Memuat...</p></main>;
+  if (!ov) {
+    return (
+      <div className={`a-root ${jakarta.variable}`}>
+        <div className="a-login"><div className="a-card md" style={{ alignItems: "center" }}><div className="a-sub">Memuat dashboard...</div></div></div>
+      </div>
+    );
+  }
 
-  const actionCount = ov.refunds.length;
+  const tickets = ov.refunds.length;
+  const ready = ov.machines.filter((m) => m.availability.state === "available").length;
+  const allReady = ov.machines.length > 0 && ready === ov.machines.length;
   const tickStale = !ov.lastTick || Date.now() - new Date(ov.lastTick).getTime() > 5 * 60_000;
+  const go = (t: string) => { setTab(t as Tab); setOpen(false); };
 
   return (
-    <main className="wrap wide">
-      <div className="row between" style={{ marginBottom: 12 }}>
-        <h1 style={{ margin: 0 }}>Dashboard KioskCetak</h1>
-        <button className="small" onClick={async () => { await api("/api/admin/logout", { method: "POST" }); load(); }}>Keluar</button>
+    <div className={`a-root ${jakarta.variable}`}>
+      <div className={`a-scrim${open ? " open" : ""}`} onClick={() => setOpen(false)} />
+      <aside className={`a-side${open ? " open" : ""}`}>
+        <div className="a-side-top">
+          <div className="a-brand"><Brand size={36} tagline="Admin Console" /></div>
+          <div className="a-cluster">
+            <span className="l"><span className={`a-dot${allReady ? "" : ov.machines.length ? " warn" : " bad"}`} />{ready} / {ov.machines.length} Kiosk Siap</span>
+            <span className={`r${allReady ? "" : " bad"}`}>{allReady ? "Normal" : "Cek"}</span>
+          </div>
+          <nav className="a-nav">
+            {NAV.map((n) => (
+              <button key={n.key} className={tab === n.key ? "on" : ""} onClick={() => go(n.key)}>
+                <span className="t"><AIcon d={n.icon} size={20} />{n.label}</span>
+                {n.key === "tiket" && tickets > 0 && <span className="bdg">{tickets}</span>}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div className="a-side-bot">
+          <div className={`a-gate${tickStale ? " bad" : ""}`}>
+            <AIcon d={A.cloud} size={18} />
+            <div><small>Pekerjaan Terjadwal</small><b>{tickStale ? `Berhenti sejak ${fmt(ov.lastTick)}` : "Berjalan normal"}</b></div>
+          </div>
+        </div>
+      </aside>
+
+      <div className="a-body">
+        <header className="a-top">
+          <button className="a-burger" onClick={() => setOpen(true)} aria-label="Buka menu"><AIcon d={A.menu} size={20} /></button>
+          <form className="a-search" onSubmit={(e) => { e.preventDefault(); setSearchQ(q.trim()); go("riwayat"); }}>
+            <AIcon d={A.search} size={18} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari kode transaksi..." />
+          </form>
+          <div className="a-top-r">
+            <div className="a-live"><span className="a-dot" />Diperbarui {loadedAt ? new Date(loadedAt).toLocaleTimeString("id-ID") : "-"}</div>
+            <button className="a-ibtn" onClick={() => go("tiket")} aria-label="Antrean tiket" title={tickets ? `${tickets} tiket menunggu` : "Tidak ada tiket"}>
+              <AIcon d={A.bell} size={20} />{tickets > 0 && <span className="dot" />}
+            </button>
+            <div className="a-user">
+              <div className="a-avatar"><AIcon d={A.user} size={18} /></div>
+              <div><b>Admin</b><small>{ov.admin}</small></div>
+            </div>
+            <button className="a-ibtn" aria-label="Keluar" title="Keluar" onClick={async () => { await api("/api/admin/logout", { method: "POST" }); load(); }}><AIcon d={A.logout} size={20} /></button>
+          </div>
+        </header>
+
+        <main className="a-main">
+          <div className="a-wrap">
+            {tickStale && (
+              <div className="a-banner"><AIcon d={A.alert} size={18} /><span>Pekerjaan terjadwal (kedaluwarsa, hapus file, rekonsiliasi) tidak berjalan sejak {fmt(ov.lastTick)}. Periksa cron dan agent.</span></div>
+            )}
+            {tab === "dashboard" && <Monitoring ov={ov} reload={load} toast={showToast} go={go} />}
+            {tab === "riwayat" && <Reports initialQ={searchQ} />}
+            {tab === "tiket" && <Tickets ov={ov} reload={load} toast={showToast} />}
+            {tab === "harga" && <Pricing ov={ov} reload={load} toast={showToast} />}
+            {tab === "log" && <Logs />}
+          </div>
+        </main>
       </div>
-      {tickStale && <div className="banner bad">Pekerjaan terjadwal (kedaluwarsa, hapus file, rekonsiliasi) tidak berjalan sejak {fmt(ov.lastTick)}. Periksa cron dan agent.</div>}
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-            {t}{t === "Tindakan" && actionCount > 0 ? ` (${actionCount})` : ""}
-          </button>
-        ))}
-      </div>
-      {tab === "Ringkasan" && <Summary ov={ov} reload={load} />}
-      {tab === "Tindakan" && <Actions ov={ov} reload={load} />}
-      {tab === "Transaksi" && <Orders />}
-      {tab === "Laporan" && <Report />}
-      {tab === "Pengaturan" && <Settings ov={ov} reload={load} />}
-    </main>
+      {toast}
+    </div>
   );
 }
 
@@ -69,316 +128,34 @@ function Login({ onDone }: { onDone: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
   return (
-    <main className="wrap">
-      <form
-        className="card stack"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          try {
-            await api("/api/admin/login", { method: "POST", json: { email, password } });
-            onDone();
-          } catch (x: any) {
-            setErr(x.message);
-          }
-        }}
-      >
-        <h1>Login admin</h1>
-        <div className="field"><label>Email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" /></div>
-        <div className="field"><label>Password</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" /></div>
-        {err && <div className="err">{err}</div>}
-        <button className="primary block" type="submit">Masuk</button>
-      </form>
-    </main>
-  );
-}
-
-function stateClass(s: string) {
-  return s === "available" ? "ok" : s === "busy" ? "warn" : "bad";
-}
-
-function Summary({ ov, reload }: { ov: Overview; reload: () => void }) {
-  const [token, setToken] = useState<string | null>(null);
-  const act = async (id: string, action: string, confirmText?: string) => {
-    if (confirmText && !confirm(confirmText)) return;
-    try {
-      const r = await api<{ agentToken?: string }>(`/api/admin/machines/${id}`, { method: "POST", json: { action } });
-      if (r.agentToken) setToken(r.agentToken);
-      reload();
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
-  return (
-    <div className="stack">
-      <div className="grid2">
-        <div className="card"><div className="muted">Order dibayar hari ini</div><div className="big">{ov.today.orders}</div></div>
-        <div className="card"><div className="muted">Pendapatan hari ini</div><div className="big">{formatRupiah(ov.today.revenue)}</div></div>
+    <div className={`a-root ${jakarta.variable}`}>
+      <div className="a-login">
+        <form
+          className="a-card md"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setErr("");
+            try {
+              await api("/api/admin/login", { method: "POST", json: { email, password } });
+              onDone();
+            } catch (x: any) {
+              setErr(x.message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <div className="a-brand" style={{ padding: 0, height: "auto" }}><Brand size={48} tagline="Admin Console" /></div>
+          <div><h1 className="a-h2">Masuk sebagai admin</h1><p className="a-sub" style={{ marginTop: 4 }}>Gunakan akun admin yang terdaftar. Sesi berakhir otomatis.</p></div>
+          <div className="a-field"><label>Email</label><input className="a-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" /></div>
+          <div className="a-field"><label>Password</label><input className="a-in" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" /></div>
+          {err && <div className="a-err">{err}</div>}
+          <button className="a-btn pri block" type="submit" disabled={busy} style={{ minHeight: "3rem" }}>{busy ? "Memeriksa..." : "Masuk"}</button>
+        </form>
       </div>
-      {token && (
-        <div className="banner warn">
-          <b>Token agent baru (hanya tampil sekali, simpan sekarang):</b>
-          <div style={{ wordBreak: "break-all", fontFamily: "monospace" }}>{token}</div>
-          <button className="small" onClick={() => setToken(null)}>Sembunyikan</button>
-        </div>
-      )}
-      {ov.machines.map((m) => {
-        const s = m.settings;
-        const paperLeft = s ? Math.max(0, s.paper_capacity - m.sheets_since_refill) : 0;
-        const bw = s ? Math.max(0, Math.round(100 - (m.sides_bw_since_refill / s.ink_bw_capacity) * 100)) : 0;
-        const col = s ? Math.max(0, Math.round(100 - (m.sides_color_since_refill / s.ink_color_capacity) * 100)) : 0;
-        return (
-          <div className="card stack" key={m.id}>
-            <div className="row between">
-              <h2 style={{ margin: 0 }}>{m.code ? `#${m.code} · ` : ""}{m.name}{m.location ? <span className="muted"> · {m.location}</span> : null}</h2>
-              <span className={`pill ${stateClass(m.availability.state)}`}>{m.availability.state === "available" ? "Tersedia" : m.availability.state === "busy" ? "Dipakai" : "Tidak tersedia"}</span>
-            </div>
-            {m.availability.reason && <div className="muted">{m.availability.reason}</div>}
-            <div className="grid2 muted">
-              <div>Heartbeat: {fmt(m.last_heartbeat)}</div>
-              <div>Printer: {m.printer_state}</div>
-              <div>Perkiraan kertas: ±{paperLeft} lembar</div>
-              <div>Tinta hitam ±{bw}% · warna ±{col}%</div>
-              <div>Nozzle check: {m.nozzle_result ? `${m.nozzle_result} (${fmt(m.last_nozzle_check)})` : "-"}</div>
-              <div>Order aktif: {m.active_order_id ? "ya" : "tidak"}</div>
-            </div>
-            <div className="row">
-              <button onClick={() => act(m.id, "refill", "Reset estimasi kertas/tinta dan aktifkan mesin?")}>Isi ulang selesai</button>
-              <button onClick={() => act(m.id, "unlock", "Lepas kunci mesin? Order yang sedang berjalan tidak lagi memblokir mesin.")} disabled={!m.active_order_id}>Lepas kunci</button>
-              {m.maintenance ? <button onClick={() => act(m.id, "maintenance-off")}>Selesai perawatan</button> : <button onClick={() => act(m.id, "maintenance-on")}>Mode perawatan</button>}
-              {m.fault && <button onClick={() => act(m.id, "clear-fault")}>Hapus status gangguan</button>}
-            </div>
-            <details>
-              <summary className="muted">Layar kiosk &amp; agent</summary>
-              <div className="stack" style={{ marginTop: 8 }}>
-                <div>URL layar kiosk (buka di Chrome mode kiosk pada mesin):</div>
-                <input readOnly value={m.kioskUrl} onFocus={(e) => e.target.select()} />
-                <div className="row">
-                  <button className="small" onClick={() => act(m.id, "rotate-token", "Buat token agent baru? Token lama langsung tidak berlaku.")}>{m.hasAgentToken ? "Ganti token agent" : "Buat token agent"}</button>
-                  {m.hasAgentToken && <button className="small danger" onClick={() => act(m.id, "revoke-token", "Cabut token agent? Agent akan berhenti bekerja.")}>Cabut token</button>}
-                </div>
-              </div>
-            </details>
-          </div>
-        );
-      })}
-      {ov.machines.length === 0 && <CreateMachine reload={reload} />}
-      <div className="card">
-        <h2>Order aktif</h2>
-        {ov.active.length === 0 ? <div className="muted">Tidak ada.</div> : (
-          <table><tbody>{ov.active.map((o) => <tr key={o.id}><td>{o.code}</td><td>{STATUS_LABEL[o.status]}</td><td>{formatRupiah(o.total)}</td><td>{fmt(o.created_at)}</td></tr>)}</tbody></table>
-        )}
-      </div>
-      <div className="card">
-        <h2>Alert terbaru</h2>
-        {ov.alerts.length === 0 ? <div className="muted">Belum ada.</div> : (
-          <table><tbody>{ov.alerts.map((a) => <tr key={a.id}><td>{fmt(a.created_at)}</td><td>{a.message}</td><td>{a.sent ? "terkirim" : "belum"}</td></tr>)}</tbody></table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CreateMachine({ reload }: { reload: () => void }) {
-  const [name, setName] = useState("Mesin 1");
-  const [location, setLocation] = useState("");
-  const [code, setCode] = useState("");
-  return (
-    <div className="card stack">
-      <h2>Tambah mesin</h2>
-      <div className="field"><label>Nama</label><input value={name} onChange={(e) => setName(e.target.value)} /></div>
-      <div className="field"><label>Kode mesin (kosongkan untuk otomatis: 001, 002, ...)</label><input value={code} maxLength={8} placeholder="001" onChange={(e) => setCode(e.target.value)} /></div>
-      <div className="field"><label>Lokasi</label><input value={location} onChange={(e) => setLocation(e.target.value)} /></div>
-      <button className="primary" onClick={async () => {
-        try {
-          const r = await api<{ agentToken: string }>("/api/admin/machines", { method: "POST", json: { name, location, code } });
-          alert("Token agent (simpan, hanya tampil sekali):\n\n" + r.agentToken);
-          reload();
-        } catch (e: any) { alert(e.message); }
-      }}>Buat mesin</button>
-    </div>
-  );
-}
-
-function Actions({ ov, reload }: { ov: Overview; reload: () => void }) {
-  const call = async (id: string, body: any) => {
-    try {
-      await api(`/api/admin/refunds/${id}`, { method: "POST", json: body });
-      reload();
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
-  if (!ov.refunds.length) return <div className="card muted">Tidak ada tindakan yang menunggu.</div>;
-  return (
-    <div className="stack">
-      {ov.refunds.map((r) => (
-        <div className="card stack" key={r.id}>
-          <div className="row between">
-            <b>{r.orders?.code}</b>
-            <span className={`pill ${r.status === "pending" ? "warn" : "bad"}`}>{r.status === "pending" ? "Siap ditransfer" : "Menunggu data user"}</span>
-          </div>
-          <div className="muted">{r.reason}</div>
-          <div>Nominal: <b>{formatRupiah(r.amount)}</b></div>
-          {r.status === "pending" ? (
-            <div>Transfer ke: <b>{r.holder_name}</b> · {r.destination}</div>
-          ) : (
-            <div className="muted">User belum mengisi data. Minta dia membuka halaman status dengan kode di atas.</div>
-          )}
-          <div className="row">
-            {r.status === "pending" && (
-              <>
-                <button className="primary" onClick={() => {
-                  const note = prompt("Catatan / bukti transfer (mis. nomor referensi):") ?? "";
-                  call(r.id, { action: "done", note });
-                }}>Tandai sudah ditransfer</button>
-                <button onClick={() => {
-                  const v = prompt(`Refund proporsional: nominal yang dikembalikan (kurang dari ${r.amount}):`);
-                  if (v) call(r.id, { action: "done", kind: "partial", amount: Number(v), note: "Refund sebagian" });
-                }}>Refund sebagian</button>
-              </>
-            )}
-            {!r.orders?.files_deleted_at && <button onClick={() => confirm("Cetak ulang order ini?") && call(r.id, { action: "reprint" })}>Cetak ulang</button>}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Orders() {
-  const [rows, setRows] = useState<any[]>([]);
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const search = useCallback(async () => {
-    const p = new URLSearchParams();
-    if (q) p.set("q", q);
-    if (status) p.set("status", status);
-    if (from) p.set("from", from);
-    if (to) p.set("to", to);
-    setRows((await api<{ orders: any[] }>(`/api/admin/orders?${p}`)).orders);
-  }, [q, status, from, to]);
-  useEffect(() => { search(); }, [search]);
-  return (
-    <div className="card stack">
-      <div className="grid2">
-        <div className="field"><label>Cari kode</label><input value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <div className="field"><label>Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">Semua</option>
-            {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </div>
-        <div className="field"><label>Dari</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-        <div className="field"><label>Sampai</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-      </div>
-      <div style={{ overflowX: "auto" }}>
-        <table>
-          <thead><tr><th>Kode</th><th>Waktu</th><th>Mesin</th><th>File (metadata)</th><th>Status</th><th>Total</th></tr></thead>
-          <tbody>
-            {rows.map((o) => (
-              <tr key={o.id}>
-                <td>{o.code}</td>
-                <td>{fmt(o.created_at)}</td>
-                <td>{o.machines?.name}</td>
-                <td>{(o.order_files ?? []).map((f: any, i: number) => <div key={i}>{f.original_name} <span className="muted">({f.pages ?? "?"} hal)</span></div>)}</td>
-                <td>{STATUS_LABEL[o.status] ?? o.status}</td>
-                <td className="price">{formatRupiah(o.total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {rows.length === 0 && <div className="muted">Tidak ada data.</div>}
-    </div>
-  );
-}
-
-function Report() {
-  const [group, setGroup] = useState<"day" | "month">("day");
-  const [from, setFrom] = useState(new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
-  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const [rows, setRows] = useState<any[]>([]);
-  const qs = `group=${group}&from=${from}&to=${to}`;
-  useEffect(() => { api<{ rows: any[] }>(`/api/admin/report?${qs}`).then((r) => setRows(r.rows)).catch(() => {}); }, [qs]);
-  const sum = rows.reduce((a, r) => ({ revenue: a.revenue + r.revenue, refunded: a.refunded + r.refunded, orders: a.orders + r.orders, sheets: a.sheets + r.sheets }), { revenue: 0, refunded: 0, orders: 0, sheets: 0 });
-  return (
-    <div className="card stack">
-      <div className="grid2">
-        <div className="field"><label>Per</label><select value={group} onChange={(e) => setGroup(e.target.value as any)}><option value="day">Hari</option><option value="month">Bulan</option></select></div>
-        <div />
-        <div className="field"><label>Dari</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-        <div className="field"><label>Sampai</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-      </div>
-      <table>
-        <thead><tr><th>Periode</th><th>Order</th><th>Lembar</th><th>Pendapatan</th><th>Refund</th><th>Bersih</th></tr></thead>
-        <tbody>
-          {rows.map((r) => <tr key={r.period}><td>{r.period}</td><td>{r.orders}</td><td>{r.sheets}</td><td className="price">{formatRupiah(r.revenue)}</td><td>{formatRupiah(r.refunded)}</td><td className="price">{formatRupiah(r.revenue - r.refunded)}</td></tr>)}
-          <tr><th>Total</th><th>{sum.orders}</th><th>{sum.sheets}</th><th>{formatRupiah(sum.revenue)}</th><th>{formatRupiah(sum.refunded)}</th><th>{formatRupiah(sum.revenue - sum.refunded)}</th></tr>
-        </tbody>
-      </table>
-      <a className="btn" href={`/api/admin/report?${qs}&format=csv`}>Unduh CSV</a>
-    </div>
-  );
-}
-
-const NUM_FIELDS: [string, string][] = [
-  ["price_bw_single", "Harga hitam-putih 1 sisi (per sisi)"],
-  ["price_bw_duplex", "Harga hitam-putih bolak-balik (per sisi)"],
-  ["price_color_single", "Harga warna 1 sisi (per sisi)"],
-  ["price_color_duplex", "Harga warna bolak-balik (per sisi)"],
-  ["min_total", "Total minimal order"],
-  ["max_copies", "Maks salinan per file"],
-  ["paper_capacity", "Kapasitas kertas (lembar) per isi ulang"],
-  ["paper_warn", "Peringatkan saat sisa kertas ≤"],
-  ["ink_bw_capacity", "Perkiraan sisi hitam-putih per isi ulang tinta"],
-  ["ink_color_capacity", "Perkiraan sisi warna per isi ulang tinta"],
-  ["ink_warn_pct", "Peringatkan tinta saat ≤ (%)"],
-  ["offline_alert_minutes", "Alert jika offline lebih dari (menit)"],
-];
-
-function Settings({ ov, reload }: { ov: Overview; reload: () => void }) {
-  return <div className="stack">{ov.machines.map((m) => <SettingsForm key={m.id} m={m} reload={reload} />)}</div>;
-}
-
-function SettingsForm({ m, reload }: { m: Machine; reload: () => void }) {
-  const [v, setV] = useState<Record<string, any>>({ ...m.settings });
-  const [msg, setMsg] = useState("");
-  if (!m.settings) return null;
-  const set = (k: string, val: any) => setV((x) => ({ ...x, [k]: val }));
-  return (
-    <div className="card stack">
-      <h2>{m.code ? `#${m.code} · ` : ""}{m.name}</h2>
-      <div className="grid2">
-        <div className="field"><label>Nama mesin</label><input value={v.name ?? m.name ?? ""} onChange={(e) => set("name", e.target.value)} /></div>
-        <div className="field"><label>Kode mesin (unik, mis. 001)</label><input value={v.code ?? m.code ?? ""} maxLength={8} onChange={(e) => set("code", e.target.value)} /></div>
-        <div className="field" style={{ gridColumn: "1 / -1" }}><label>Lokasi (tampil di layar kiosk)</label><input value={v.location ?? m.location ?? ""} placeholder="Perpustakaan Pusat Lt. 1" onChange={(e) => set("location", e.target.value)} /></div>
-        {NUM_FIELDS.map(([k, label]) => (
-          <div className="field" key={k}><label>{label}</label><input type="number" value={v[k] ?? ""} onChange={(e) => set(k, e.target.value === "" ? "" : Number(e.target.value))} /></div>
-        ))}
-        <div className="field"><label>Pembulatan total</label><select value={v.rounding} onChange={(e) => set("rounding", Number(e.target.value))}><option value={100}>Rp 100</option><option value={500}>Rp 500</option></select></div>
-        <div className="field"><label>WhatsApp admin (628xxx) untuk "Laporkan masalah"</label><input value={v.admin_whatsapp ?? ""} onChange={(e) => set("admin_whatsapp", e.target.value)} /></div>
-      </div>
-      <div className="row">
-        {(["allow_color", "allow_duplex", "allow_nup"] as const).map((k) => (
-          <label key={k} style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--ink)" }}>
-            <input type="checkbox" style={{ width: 22, minHeight: 22 }} checked={!!v[k]} onChange={(e) => set(k, e.target.checked)} />
-            {k === "allow_color" ? "Warna aktif" : k === "allow_duplex" ? "Bolak-balik aktif" : "Banyak halaman per lembar aktif"}
-          </label>
-        ))}
-      </div>
-      <div className="muted">Perubahan harga tidak memengaruhi order yang sudah menampilkan QR pembayaran.</div>
-      <button className="primary" onClick={async () => {
-        try {
-          const { machine_id, ...patch } = v;
-          await api(`/api/admin/machines/${m.id}`, { method: "PATCH", json: patch });
-          setMsg("Tersimpan.");
-          reload();
-        } catch (e: any) { setMsg(e.message); }
-      }}>Simpan</button>
-      {msg && <div className="muted">{msg}</div>}
     </div>
   );
 }

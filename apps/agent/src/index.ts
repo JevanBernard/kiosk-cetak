@@ -118,7 +118,7 @@ async function maybeNozzleCheck() {
 }
 
 async function main() {
-  log(`KioskCetak agent mulai → ${config.serverUrl}${config.dryRun ? " [DRY_RUN]" : ""}`);
+  log(`PaperMate agent mulai → ${config.serverUrl}${config.dryRun ? " [DRY_RUN]" : ""}`);
   heartbeatLoop();
   for (;;) {
     try {

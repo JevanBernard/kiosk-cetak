@@ -1,4 +1,4 @@
-export const metadata = { title: "Kebijakan Privasi - KioskCetak" };
+export const metadata = { title: "Kebijakan Privasi - PaperMate" };
 
 export default function Privacy() {
   return (

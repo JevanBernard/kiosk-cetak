@@ -27,7 +27,7 @@ export async function sendPending(onlyId?: number) {
       const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ chat_id: chat, text: `KioskCetak: ${a.message}` }),
+        body: JSON.stringify({ chat_id: chat, text: `PaperMate: ${a.message}` }),
       });
       if (res.ok) await db().from("alerts").update({ sent: true }).eq("id", a.id);
     } catch (e) {

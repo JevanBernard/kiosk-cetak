@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./m.css";
+import { LogoMark, Wordmark } from "../brand";
 
 export const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-jakarta", display: "swap" });
 
@@ -52,7 +53,7 @@ export type MachineInfo = { name: string; code: string | null; location: string 
 
 /** Label singkat mesin: "Kiosk #001 · Perpustakaan". */
 export const machineLabel = (m: MachineInfo | null | undefined) =>
-  m ? `${m.code ? `Kiosk #${m.code}` : m.name}${m.location ? ` · ${m.location}` : ""}` : "KioskCetak";
+  m ? `${m.code ? `Kiosk #${m.code}` : m.name}${m.location ? ` · ${m.location}` : ""}` : "PaperMate";
 
 const STEPS = ["Unggah", "Opsi", "Bayar", "Ambil"];
 
@@ -120,10 +121,10 @@ export function Shell({
     <div className={`m-root ${jakarta.variable}`}>
       <header className="m-header">
         <div className="m-header-in">
-          <a className="m-brand" href="/" aria-label="KioskCetak">
-            <div className="m-logo"><MIcon d={I.print} size={20} /></div>
-            <div className="m-brand-t">
-              <div className="r"><b>KioskCetak</b><span className="m-tag">{tag}</span></div>
+          <a className="m-brand" href="/" aria-label="PaperMate">
+            <LogoMark size={38} />
+            <div className="m-brand-t" style={{ ["--pm-size" as string]: "38px" }}>
+              <div className="r"><Wordmark /><span className="m-tag">{tag}</span></div>
               <div className="s"><span className="m-dot" /><span>{machineLabel(machine)}</span></div>
             </div>
           </a>

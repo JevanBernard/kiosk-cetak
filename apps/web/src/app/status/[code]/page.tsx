@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatRupiah } from "@kioskcetak/shared";
 import { ApiError, STATUS_LABEL, api } from "@/lib/client";
 import { I, MIcon, Shell, Stepper, useToast } from "../../mobile/ui";
+import { Brand } from "../../brand";
 
 type Status = {
   order: { code: string; status: string; total: number; created_at: string; paid_at: string | null; printed_at: string | null };
@@ -64,9 +65,9 @@ export default function StatusPage({ params }: { params: { code: string } }) {
   }
 
   async function share() {
-    const text = `Struk KioskCetak ${code}${s ? ` · ${formatRupiah(s.order.total || s.totals.total)}` : ""}`;
+    const text = `Struk PaperMate ${code}${s ? ` · ${formatRupiah(s.order.total || s.totals.total)}` : ""}`;
     if (navigator.share) {
-      await navigator.share({ title: `Struk KioskCetak ${code}`, text, url: window.location.href }).catch(() => {});
+      await navigator.share({ title: `Struk PaperMate ${code}`, text, url: window.location.href }).catch(() => {});
     } else {
       try {
         await navigator.clipboard.writeText(window.location.href);
@@ -118,16 +119,18 @@ export default function StatusPage({ params }: { params: { code: string } }) {
     <Shell tag={paid ? "Struk" : "Status"} machine={machine}>
       <div className="m-hide-print"><Stepper step={step} /></div>
 
-      <div className={`m-card m-live ${live.c}`}>
+      {st !== "SELESAI" && (
+      <div className={`m-card m-live m-hide-print ${live.c}`}>
         <div className="m-live-in">
           <div className={`ic${live.c === "" ? " spin" : ""}`}><MIcon d={live.i} size={22} /></div>
           <div><div className="k">{live.k}</div><h2>{live.h}</h2><p>{live.p}</p></div>
         </div>
       </div>
+      )}
 
       <div className="m-card md m-stack">
         <div className="m-row">
-          <div className="m-lab m-row" style={{ justifyContent: "flex-start", gap: ".5rem" }}><MIcon d={I.receipt} size={22} />Struk Transaksi Digital</div>
+          <Brand size={40} tagline="Struk Digital" />
           {paid && <span className="m-badge fix">Lunas</span>}
         </div>
         <div className="m-meta">
@@ -191,7 +194,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
         </div>
         {wa && <a className="m-btn wa block" href={wa} target="_blank" rel="noreferrer"><MIcon d={I.chat} size={18} />Laporkan Masalah via WhatsApp Admin</a>}
       </div>
-      <div className="m-links m-hide-print"><a href="/">KioskCetak</a></div>
+      <div className="m-links m-hide-print"><a href="/">PaperMate</a></div>
       {toast}
     </Shell>
   );

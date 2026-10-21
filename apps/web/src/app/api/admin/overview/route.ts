@@ -7,7 +7,7 @@ import { availabilityOf } from "@/lib/machine";
 export const dynamic = "force-dynamic";
 
 export const GET = handler(async (req: Request) => {
-  await requireAdmin();
+  const adminEmail = await requireAdmin();
   const base = process.env.APP_URL || new URL(req.url).origin;
   const { data: machines } = await db().from("machines").select("*").order("created_at");
   const { data: settings } = await db().from("machine_settings").select("*");
@@ -34,6 +34,7 @@ export const GET = handler(async (req: Request) => {
   const { data: tick } = await db().from("app_state").select("value").eq("key", "last_tick").maybeSingle();
 
   return ok({
+    admin: adminEmail,
     machines: (machines ?? []).map((m) => {
       const { agent_token_hash, ...rest } = m;
       return {

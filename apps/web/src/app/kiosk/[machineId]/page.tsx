@@ -4,6 +4,8 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import QRCode from "qrcode";
 import { KIOSK_TOKEN_ROTATE_SECONDS, MAX_FILE_BYTES, formatRupiah, type PriceConfig } from "@kioskcetak/shared";
 import "../kiosk.css";
+import AdSlot from "./AdSlot";
+import { Brand } from "../../brand";
 import { DraftScreen, PayScreen, type KioskView } from "./Draft";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-jakarta", display: "swap" });
@@ -109,6 +111,12 @@ export default function KioskPage({ params }: { params: { machineId: string } })
     else setQrImg("");
   }, [s?.qrUrl]);
 
+  // Skala seluruh UI (satuan rem) mengikuti ukuran layar landscape, jadi 1280x720 dan 1920x1080 tampil sama proporsinya.
+  useEffect(() => {
+    document.documentElement.classList.add("k-scale");
+    return () => document.documentElement.classList.remove("k-scale");
+  }, []);
+
   // Cegah menu konteks / seleksi di layar kiosk
   useEffect(() => {
     const block = (e: Event) => e.preventDefault();
@@ -127,10 +135,7 @@ export default function KioskPage({ params }: { params: { machineId: string } })
     <header className="k-header">
       <div className="k-header-in">
         <div className="k-left">
-          <div className="k-brand">
-            <div className="k-logo"><Icon d={ICONS.print} size={24} /></div>
-            <div><b>KioskCetak</b><small>Layanan Cetak Mandiri</small></div>
-          </div>
+          <Brand size={44} />
           {s && (
             <div className="k-term">
               <Icon d={ICONS.terminal} size={18} />
@@ -158,14 +163,14 @@ export default function KioskPage({ params }: { params: { machineId: string } })
   const footer = (
     <footer className="k-foot">
       <div className="k-foot-in">
-        <span><Icon d={ICONS.shield} size={18} />Transaksi aman terenkripsi QRIS{s?.code ? ` • Kiosk ID: KCK-${s.code}` : ""}</span>
-        <span>© {new Date(now).getFullYear()} KioskCetak</span>
+        <span><Icon d={ICONS.shield} size={18} />Transaksi aman terenkripsi QRIS{s?.code ? ` • Kiosk ID: PM-${s.code}` : ""}</span>
+        <span>© {new Date(now).getFullYear()} PaperMate</span>
       </div>
     </footer>
   );
 
-  const shell = (children: React.ReactNode) => (
-    <div className={`k-root ${jakarta.variable}`}>
+  const shell = (children: React.ReactNode, fit = false) => (
+    <div className={`k-root ${jakarta.variable}${fit ? " fit" : ""}`}>
       {header}
       {children}
       {footer}
@@ -244,172 +249,85 @@ export default function KioskPage({ params }: { params: { machineId: string } })
     ));
   }
 
-  // Beranda: mesin siap dipakai
+  // Beranda: mesin siap dipakai. Dirancang muat satu layar 16:9 tanpa scroll; sisi kanan atas untuk slot sponsor.
   const rotSec = s.qrRotatesAt ? Math.max(0, Math.ceil((new Date(s.qrRotatesAt).getTime() - now) / 1000)) : 0;
   const rotPct = Math.min(100, (rotSec / KIOSK_TOKEN_ROTATE_SECONDS) * 100);
   const saving = s.prices.bw > 0 ? Math.round((1 - s.prices.bwDuplex / s.prices.bw) * 100) : 0;
   const waText = encodeURIComponent(`Halo Petugas, saya butuh bantuan di ${termLabel}${s.location ? ` (${s.location})` : ""}`);
   const steps: [string, string][] = [
-    ["Scan QR dari HP", "Buka kamera atau pemindai QR. Tanpa download aplikasi ataupun instalasi."],
-    ["Unggah Dokumen dari HP", "Pilih PDF, DOCX, PPTX, atau gambar dari HP Anda."],
-    ["Atur Cetak di Layar Ini", "Lihat preview, pilih warna, bolak-balik, dan jumlah salinan."],
-    ["Bayar QRIS, Ambil Hasil", "Scan QRIS di layar dengan e-wallet. Nota bisa diunduh di HP."],
+    ["Scan QR dari HP", "Pakai kamera HP, tanpa aplikasi."],
+    ["Unggah Dokumen", "PDF, DOCX, PPTX, JPG, atau PNG."],
+    ["Atur & Bayar di Layar", "Preview, pilih opsi, scan QRIS."],
+    ["Ambil Hasil & Nota", "Kertas keluar di nampan."],
+  ];
+  const prices: [string, number, boolean][] = [
+    ["Hitam-putih", s.prices.bw, false],
+    ["Hitam-putih bolak-balik", s.prices.bwDuplex, false],
+    ["Warna", s.prices.color, true],
+    ["Warna bolak-balik", s.prices.colorDuplex, true],
   ];
 
   return shell(
-    <main className="k-page">
-      {/* Identitas mesin */}
-      <section className="k-card k-id">
-        <div className="k-id-l">
-          <div className="k-id-ico"><Icon d={ICONS.print} size={28} /></div>
-          <div>
-            <h2>
-              Terminal Kiosk{s.code ? ` #${s.code}` : ""}
-              {s.location && (<><span className="sep">•</span><span className="loc">{s.location}</span></>)}
-            </h2>
-            <div className="k-id-badges">
-              <span className="k-badge"><span className="k-dot" />Mesin Siap &amp; Tersedia</span>
-              <span className="k-id-sub">{s.name}</span>
-            </div>
+    <main className="k-idle">
+      <section className="k-card md k-i-scan">
+        <div className="k-i-top">
+          <span className="k-pill fixed"><Icon d={ICONS.scan} size={16} />Sesi QR Aman</span>
+          <span className="k-pill high"><Icon className="k-spinicon" d={ICONS.refresh} size={16} />Berotasi <b className="k-num">00:{pad(rotSec)}</b></span>
+        </div>
+        <h1 className="k-i-h1">Scan QR dengan Kamera HP Anda</h1>
+        <p className="k-i-lead">Tanpa unduh aplikasi atau daftar. Unggah dokumen dari HP, lalu atur cetak dan bayar di layar ini.</p>
+        <div className="k-qrcol">
+          <div className="k-qrwrap">
+            <i /><i /><i /><i />
+            {qrImg ? <img className="k-qr" src={qrImg} alt="Scan untuk mulai" /> : <div className="k-qr-ph">Menyiapkan QR...</div>}
+            {qrImg && <span className="k-scanline" />}
+            {s.phoneConnected && (
+              <div className="k-linked">
+                <div className="k-hero-icon ok" style={{ width: "5rem", height: "5rem" }}><Icon d={ICONS.check} size={40} /></div>
+                <b>HP terhubung</b>
+                <p>Unggah dokumen di HP kamu.</p>
+              </div>
+            )}
+          </div>
+          <div className="k-cycle">
+            <div className="k-bar"><i style={{ width: `${rotPct}%` }} /></div>
+            <div className="t"><span>Refresh Otomatis</span><span>Siklus {KIOSK_TOKEN_ROTATE_SECONDS} Detik</span></div>
           </div>
         </div>
-        <div className="k-chips">
-          {hw && (
-            <>
-              <div className="k-hwchip">
-                <Icon d={ICONS.paper} size={20} />
-                <div><small>Kertas Baki 1</small><b>A4 (~{hw.paperLeft} lbr)</b></div>
-              </div>
-              <div className="k-hwchip">
-                <Icon d={ICONS.ink} size={20} />
-                <div><small>Tinta Cetak</small><b className="k-num">Hitam {hw.inkBw}% · Warna {hw.inkColor}%</b></div>
-              </div>
-              <div className="k-hwchip">
-                <Icon d={ICONS.duplex} size={20} />
-                <div><small>Kemampuan</small><b>{hw.duplex ? "Auto-Duplex Aktif" : "Satu Sisi"}{hw.color ? " • Warna" : ""}</b></div>
-              </div>
-            </>
-          )}
-          <div className="k-hwchip hi">
-            <Icon d={ICONS.unlock} size={20} />
-            <div><small>Akses</small><b>Tanpa Login • Mandiri</b></div>
-          </div>
-        </div>
+        <div className="k-i-priv"><Icon d={ICONS.shield} size={18} /><span>Dokumen Anda tidak dibaca orang lain dan otomatis dihapus setelah dicetak.</span></div>
       </section>
 
-      <div className="k-grid">
-        {/* Hero QR */}
-        <section className="k-card md k-hero">
-          <span className="k-glow a" />
-          <span className="k-glow b" />
-          <div className="k-copy">
-            <div className="k-toprow">
-              <div className="l">
-                <span className="k-pill fixed"><Icon d={ICONS.scan} size={16} />Sesi QR Aman</span>
-              </div>
-              <span className="k-pill high">
-                <Icon className="k-spinicon" d={ICONS.refresh} size={18} />
-                Berotasi: <b className="k-num">00:{pad(rotSec)}</b>
-              </span>
-            </div>
-            <h1 className="k-h1">Scan QR Menggunakan Kamera HP Anda</h1>
-            <p className="k-lead">Tanpa perlu unduh aplikasi atau mendaftar. Scan QR di bawah, unggah dokumen dari HP, lalu atur cetak dan bayar langsung di layar ini.</p>
-          </div>
+      <div className="k-i-right">
+        <AdSlot whatsapp={s.adminWhatsapp} />
 
-          <div className="k-scanbox">
-            <div className="k-qrcol">
-              <div className="k-qrwrap">
-                <i /><i /><i /><i />
-                {qrImg ? <img className="k-qr" src={qrImg} alt="Scan untuk mulai" /> : <div className="k-qr-ph">Menyiapkan QR...</div>}
-                {qrImg && <span className="k-scanline" />}
-                {s.phoneConnected && (
-                  <div className="k-linked">
-                    <div className="k-hero-icon ok" style={{ width: "5rem", height: "5rem" }}><Icon d={ICONS.check} size={40} /></div>
-                    <b>HP terhubung</b>
-                    <p>Unggah dokumen di HP kamu.</p>
-                  </div>
-                )}
-              </div>
-              <div className="k-cycle">
-                <div className="k-bar"><i style={{ width: `${rotPct}%` }} /></div>
-                <div className="t"><span>Refresh Otomatis</span><span>Siklus {KIOSK_TOKEN_ROTATE_SECONDS} Detik</span></div>
-              </div>
+        <section className="k-card k-i-steps">
+          {steps.map(([t, d], i) => (
+            <div key={t} className="k-i-step">
+              <div className="n">{i + 1}</div>
+              <div><b>{t}</b><span>{d}</span></div>
             </div>
-          </div>
-
-          <div className="k-privacy">
-            <div className="ic"><Icon d={ICONS.shield} size={20} /></div>
-            <div>
-              <b>Privasi Terjamin</b>
-              <p>Dokumen Anda tidak dibaca orang lain dan otomatis dihapus segera setelah pencetakan selesai.</p>
-            </div>
-          </div>
+          ))}
         </section>
 
-        {/* Kolom kanan */}
-        <div className="k-side">
-          <section className="k-card k-panel">
-            <div className="k-panel-h">
-              <h2><Icon d={ICONS.sync} size={22} />Status Sesi Kiosk</h2>
-              <span className={`k-pill ${s.phoneConnected ? "" : "high"}`} style={s.phoneConnected ? { background: "#ecfdf5", color: "#047857" } : undefined}>
-                <span className="k-dot" style={{ width: ".5rem", height: ".5rem", color: s.phoneConnected ? "var(--k-ok)" : "var(--k-cyan)" }} />
-                {s.phoneConnected ? "HP Terhubung" : "Menunggu Pengguna..."}
-              </span>
-            </div>
-            <div className="k-sync">
-              <div className="ic"><Icon d={ICONS.phone} size={24} /></div>
-              <div>
-                <b>Sinkronisasi Realtime Display</b>
-                <p>Begitu QR di-scan, layar ini otomatis menandai bahwa HP Anda sudah terhubung dan mesin dikunci khusus untuk sesi Anda.</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="k-card k-panel" style={{ flex: 1 }}>
-            <div className="k-panel-h">
-              <h2>Cara Cetak Mandiri</h2>
-              <span className="tag">Cepat &amp; Praktis</span>
-            </div>
-            <div className="k-steps">
-              {steps.map(([t, d], i) => (
-                <div key={t} className={`k-step${i === 0 ? " on" : i === steps.length - 1 ? " end" : ""}`}>
-                  <div className="n">{i + 1}</div>
-                  <div><b>{t}</b><span>{d}</span></div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="k-card k-panel">
-            <div className="k-panel-h">
-              <span className="k-tarif-h">Transparansi Tarif &amp; Dokumen</span>
-              {saving > 0 && <span className="k-save">Hemat {saving}% Duplex</span>}
-            </div>
-            <div className="k-prices">
-              <div className="k-price"><small>Hitam Putih (B&amp;W)</small><b className="k-num">{formatRupiah(s.prices.bw)} <span>/ sisi</span></b></div>
-              <div className="k-price c"><small>Warna Penuh (Color)</small><b className="k-num">{formatRupiah(s.prices.color)} <span>/ sisi</span></b></div>
-              <div className="k-price"><small>B&amp;W Bolak-balik</small><b className="k-num">{formatRupiah(s.prices.bwDuplex)} <span>/ sisi</span></b></div>
-              <div className="k-price c"><small>Warna Bolak-balik</small><b className="k-num">{formatRupiah(s.prices.colorDuplex)} <span>/ sisi</span></b></div>
-            </div>
-            <div className="k-formats">
-              <span><Icon d={ICONS.checkCircle} size={16} />Format: <strong>PDF, DOCX, PPTX, JPG, PNG</strong> (Maks {Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)</span>
-              <span style={{ fontSize: ".625rem", fontWeight: 700 }}>Upload PDF untuk hasil paling akurat</span>
-            </div>
-          </section>
-        </div>
+        <section className="k-card k-i-tarif">
+          <div className="k-panel-h">
+            <span className="k-tarif-h">Tarif per sisi</span>
+            {saving > 0 && <span className="k-save">Hemat {saving}% bolak-balik</span>}
+            <span className="k-i-fmt">PDF, DOCX, PPTX, JPG, PNG • Maks {Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB</span>
+            {s.adminWhatsapp && (
+              <a className="k-help" href={`https://wa.me/${s.adminWhatsapp}?text=${waText}`} target="_blank" rel="noopener noreferrer">
+                <Icon d={ICONS.support} size={16} />Bantuan Petugas
+              </a>
+            )}
+          </div>
+          <div className="k-i-prices">
+            {prices.map(([label, value, color]) => (
+              <div key={label} className={`k-price${color ? " c" : ""}`}><small>{label}</small><b className="k-num">{formatRupiah(value)}</b></div>
+            ))}
+          </div>
+        </section>
       </div>
-
-      <section className="k-card k-bottom">
-        <div className="info">
-          <div className="ic"><Icon d={ICONS.tv} size={20} /></div>
-          <p><strong>Info Layar:</strong> HP dipakai untuk mengunggah dokumen. Pengaturan cetak, preview, dan pembayaran dilakukan di layar ini.</p>
-        </div>
-        {s.adminWhatsapp && (
-          <a className="k-help" href={`https://wa.me/${s.adminWhatsapp}?text=${waText}`} target="_blank" rel="noopener noreferrer">
-            <Icon d={ICONS.support} size={18} />Bantuan Petugas Kiosk
-          </a>
-        )}
-      </section>
     </main>,
+    true,
   );
 }

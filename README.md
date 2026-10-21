@@ -1,4 +1,4 @@
-# KioskCetak
+# PaperMate
 
 Sistem kiosk cetak mandiri sesuai [kioskcetak-prd.md](kioskcetak-prd.md): scan QR di layar kiosk → upload dari HP → bayar QRIS → tercetak otomatis.
 

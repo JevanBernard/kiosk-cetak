@@ -1,4 +1,4 @@
-export const metadata = { title: "Syarat Penggunaan - KioskCetak" };
+export const metadata = { title: "Syarat Penggunaan - PaperMate" };
 
 export default function Terms() {
   return (

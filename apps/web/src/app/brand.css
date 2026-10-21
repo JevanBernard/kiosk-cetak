@@ -1,0 +1,11 @@
+/* Branding PaperMate: biru tua #131b2e untuk "Paper", biru #1d4ed8 untuk "Mate". */
+.pm-mark { display: block; flex: none; filter: drop-shadow(0 6px 12px rgba(29, 78, 216, .28)); }
+.pm-brand { display: inline-flex; align-items: center; gap: calc(var(--pm-size, 40px) * .3); min-width: 0; }
+.pm-text { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--pm-size, 40px) * .08); min-width: 0; }
+.pm-word { font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: #131b2e; font-size: calc(var(--pm-size, 40px) * .56); white-space: nowrap; }
+.pm-word em { font-style: normal; color: #1d4ed8; }
+.pm-tag { display: inline-flex; align-items: center; gap: .4em; padding: .28em .8em; border-radius: .6em; background: #eef4ff; color: #1e3fae; font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; font-size: calc(var(--pm-size, 40px) * .22); line-height: 1.2; white-space: nowrap; }
+.pm-dot { width: .7em; height: .7em; border-radius: 50%; background: #10b981; display: inline-block; }
+.pm-chip { display: inline-flex; align-items: center; gap: .4em; margin-left: calc(var(--pm-size, 40px) * .2); padding: .45em .9em; border-radius: .75em; background: #f4f7ff; border: 1.5px solid #dbe3f3; color: #3b4660; font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; font-size: calc(var(--pm-size, 40px) * .26); white-space: nowrap; }
+.pm-chip svg { color: #1d6ff0; }
+@media (max-width: 640px) { .pm-chip { display: none; } }
