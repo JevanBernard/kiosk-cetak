@@ -112,7 +112,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
       : ["LUNAS", "MENCETAK", "CETAK_ULANG"].includes(st)
         ? { c: "", i: I.sync, k: "Status langsung", h: STATUS_LABEL[st], p: "Sedang diproses. Halaman ini diperbarui otomatis." }
         : st === "MENUNGGU_BAYAR"
-          ? { c: "plain", i: I.hourglass, k: "Menunggu pembayaran", h: STATUS_LABEL[st], p: "Scan QRIS yang tampil di layar mesin dengan aplikasi e-wallet atau m-banking." }
+          ? { c: "plain", i: I.hourglass, k: "Menunggu pembayaran", h: STATUS_LABEL[st], p: "Selesaikan pembayaran lewat halaman pembayaran (tombol di HP atau QR di layar mesin)." }
           : { c: "plain", i: I.info, k: "Status", h: STATUS_LABEL[st] ?? st, p: "Halaman ini diperbarui otomatis." };
 
   return (
@@ -139,7 +139,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
             <div><span className="m-code">{s.order.code}</span><button className="m-mini m-hide-print" onClick={copyCode} title="Salin kode" aria-label="Salin kode"><MIcon d={I.copy} size={14} /></button></div>
           </div>
           <div className="r"><span>Dibuat:</span><span>{fmt(s.order.created_at)}</span></div>
-          {paid && <div className="r"><span>Dibayar:</span><span>{fmt(s.order.paid_at)} ({s.payment?.provider === "mock" ? "simulasi" : "QRIS"})</span></div>}
+          {paid && <div className="r"><span>Dibayar:</span><span>{fmt(s.order.paid_at)} ({s.payment?.provider === "mock" ? "simulasi" : "online"})</span></div>}
           {s.order.printed_at && <div className="r"><span>Tercetak:</span><span>{fmt(s.order.printed_at)}</span></div>}
           <div className="r"><span>Kiosk Terminal:</span><span>{s.machine ? `${s.machine.code ? `#${s.machine.code} ` : ""}${s.machine.name}${s.machine.location ? ` (${s.machine.location})` : ""}` : "-"}</span></div>
         </div>

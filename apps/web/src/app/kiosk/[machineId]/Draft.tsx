@@ -139,7 +139,7 @@ export function DraftScreen({
           <div className="k-paysum-n">
             {tooLow && <span className="k-err">Total minimal {formatRupiah(view!.minTotal)}. Tambah halaman atau salinan.</span>}
             {payErr && <span className="k-err">{payErr}</span>}
-            {!tooLow && !payErr && view?.ready && <span className="k-hint">Perkiraan cetak {Math.max(1, Math.round(view.estimateSeconds / 60))} menit. Harga dikunci saat QRIS muncul; waktu bayar 5 menit.</span>}
+            {!tooLow && !payErr && view?.ready && <span className="k-hint">Perkiraan cetak {Math.max(1, Math.round(view.estimateSeconds / 60))} menit. Harga dikunci saat pembayaran dibuat; waktu bayar 5 menit.</span>}
             {!view?.ready && <span className="k-hint">Menunggu dokumen siap diproses...</span>}
           </div>
         </div>
@@ -152,7 +152,7 @@ export function DraftScreen({
             <button className="k-btn ghost" onClick={() => setConfirmCancel(false)}>Tidak</button>
           </div>
         )}
-        <button className="k-btn primary k-paybtn" disabled={!canPay} onClick={pay}>{paying ? "Menyiapkan QRIS..." : `Bayar ${formatRupiah(total)}`}</button>
+        <button className="k-btn primary k-paybtn" disabled={!canPay} onClick={pay}>{paying ? "Menyiapkan pembayaran..." : `Bayar ${formatRupiah(total)}`}</button>
       </section>
     </main>
   );
@@ -250,7 +250,10 @@ function OptionsCard({
   );
 }
 
-/** Layar bayar: QRIS besar untuk dipindai aplikasi e-wallet/m-banking di HP. */
+/**
+ * Layar bayar. Dua mode: QRIS langsung (qrString = isi QRIS, dipindai aplikasi e-wallet) atau halaman checkout
+ * (qrString = URL, dipindai kamera HP lalu pengguna memilih metode bayar).
+ */
 export function PayScreen({
   qrString, amount, code, left, onCancel,
 }: {
@@ -265,20 +268,29 @@ export function PayScreen({
     if (qrString) QRCode.toDataURL(qrString, { margin: 1, width: 720, errorCorrectionLevel: "M" }).then(setImg);
   }, [qrString]);
   const mock = qrString?.startsWith("MOCKQRIS");
+  const checkout = !!qrString && /^https?:\/\//.test(qrString);
   return (
     <main className="k-main">
       <div className="k-center wide">
-        <h1 className="k-title pay">Scan <em>QRIS</em> untuk membayar</h1>
+        <h1 className="k-title pay">{checkout ? <>Scan untuk <em>memilih metode bayar</em></> : <>Scan <em>QRIS</em> untuk membayar</>}</h1>
         <div className="k-payrow">
-          <div className="k-qrwrap">{img ? <img className="k-qr" src={img} alt="QRIS pembayaran" /> : <div className="k-qr-ph">Menyiapkan QRIS...</div>}</div>
+          <div className="k-qrwrap">{img ? <img className="k-qr" src={img} alt={checkout ? "Scan untuk membayar" : "QRIS pembayaran"} /> : <div className="k-qr-ph">Menyiapkan pembayaran...</div>}</div>
           <div className="k-payinfo">
             <div className="k-card md k-total"><small>Total bayar</small><b className="k-num">{formatRupiah(amount)}</b></div>
             <div className={`k-timer small k-num${left < 60 ? " low" : ""}`}>{fmtTime(left)}</div>
-            <ol className="k-paysteps">
-              <li>Buka GoPay, OVO, Dana, ShopeePay, atau m-banking di HP Anda</li>
-              <li>Pilih <b>Scan / Bayar</b>, arahkan ke QR di layar ini</li>
-              <li>Setelah berhasil, mesin langsung mencetak. Nota bisa diunduh di HP.</li>
-            </ol>
+            {checkout ? (
+              <ol className="k-paysteps">
+                <li>Scan QR ini dengan <b>kamera HP</b>, atau tekan <b>Pilih metode pembayaran</b> di halaman HP Anda</li>
+                <li>Pilih metode: transfer VA bank, e-wallet, QRIS, atau kartu</li>
+                <li>Setelah berhasil, mesin langsung mencetak. Nota bisa diunduh di HP.</li>
+              </ol>
+            ) : (
+              <ol className="k-paysteps">
+                <li>Buka GoPay, OVO, Dana, ShopeePay, atau m-banking di HP Anda</li>
+                <li>Pilih <b>Scan / Bayar</b>, arahkan ke QR di layar ini</li>
+                <li>Setelah berhasil, mesin langsung mencetak. Nota bisa diunduh di HP.</li>
+              </ol>
+            )}
           </div>
         </div>
         <div className="k-hint">Kode transaksi: <b>{code}</b></div>

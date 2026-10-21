@@ -63,8 +63,8 @@ function Icon({ d, size = 24, className = "k-ico" }: { d: string; size?: number;
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
- * Layar sentuh kiosk. HP pengguna hanya dipakai untuk mengunggah dokumen (FR-KSK-03), membayar QRIS lewat
- * aplikasi e-wallet, dan mengunduh nota. Preview, pengaturan cetak, ringkasan harga, dan QRIS ada di layar ini.
+ * Layar sentuh kiosk. HP pengguna hanya dipakai untuk mengunggah dokumen (FR-KSK-03), membayar, dan mengunduh
+ * nota. Preview, pengaturan cetak, ringkasan harga, dan kode bayar (QR) ada di layar ini.
  */
 export default function KioskPage({ params }: { params: { machineId: string } }) {
   const [s, setS] = useState<KioskState | null>(null);
@@ -164,7 +164,7 @@ export default function KioskPage({ params }: { params: { machineId: string } })
   const footer = (
     <footer className="k-foot">
       <div className="k-foot-in">
-        <span><Icon d={ICONS.shield} size={18} />Transaksi aman terenkripsi QRIS{s?.code ? ` • Kiosk ID: PM-${s.code}` : ""}</span>
+        <span><Icon d={ICONS.shield} size={18} />Pembayaran aman & terenkripsi{s?.code ? ` • Kiosk ID: PM-${s.code}` : ""}</span>
         <span>© {now ? new Date(now).getFullYear() : ""} PaperMate</span>
       </div>
     </footer>
@@ -258,7 +258,7 @@ export default function KioskPage({ params }: { params: { machineId: string } })
   const steps: [string, string][] = [
     ["Scan QR dari HP", "Pakai kamera HP, tanpa aplikasi."],
     ["Unggah Dokumen", "PDF, DOCX, PPTX, JPG, atau PNG."],
-    ["Atur & Bayar di Layar", "Preview, pilih opsi, scan QRIS."],
+    ["Atur & Bayar di Layar", "Preview, pilih opsi, pilih cara bayar."],
     ["Ambil Hasil & Nota", "Kertas keluar di nampan."],
   ];
   const prices: [string, number, boolean][] = [

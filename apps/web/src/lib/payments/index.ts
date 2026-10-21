@@ -1,4 +1,5 @@
 import { dokuProvider } from "./doku";
+import { dokuCheckoutProvider } from "./doku-checkout";
 import { mockProvider } from "./mock";
 
 export interface CreateQrInput {
@@ -28,7 +29,8 @@ export interface PaymentProvider {
 // Logika bisnis hanya bergantung pada antarmuka ini, bukan pada SDK penyedia (NFR-SCL-03).
 export function getProvider(): PaymentProvider {
   const name = process.env.PAYMENT_PROVIDER ?? "mock";
-  if (name === "doku") return dokuProvider;
+  if (name === "doku") return dokuProvider; // DOKU SNAP QRIS (butuh merchantId + kunci RSA; QRIS tidak ada di sandbox)
+  if (name === "doku_checkout") return dokuCheckoutProvider; // halaman bayar DOKU, banyak metode
   if (name === "mock") return mockProvider;
   throw new Error(`PAYMENT_PROVIDER tidak dikenal: ${name}`);
 }

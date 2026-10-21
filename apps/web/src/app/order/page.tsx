@@ -25,6 +25,7 @@ type OrderData = {
     whatsapp: string | null;
   };
   sessionExpiresAt: string;
+  payUrl?: string | null;
   view: null | {
     order: { code: string; status: string; pay_expires_at: string | null; total: number; paid_at: string | null };
     files: FileView[];
@@ -189,7 +190,7 @@ export default function OrderPage() {
   const showUploader = draft || (canStartNew && avail?.state === "available");
   const printing = !!status && PRINTING.includes(status);
   const step = status === "SELESAI" ? 5 : printing ? 4 : status === "MENUNGGU_BAYAR" ? 3 : draft && files.length > 0 ? 2 : 1;
-  const tag = status === "MENUNGGU_BAYAR" ? "Pembayaran QRIS" : printing || status === "SELESAI" ? "Status Cetak" : "Unggah Dokumen";
+  const tag = status === "MENUNGGU_BAYAR" ? "Pembayaran" : printing || status === "SELESAI" ? "Status Cetak" : "Unggah Dokumen";
   const receiptBtn = view && (
     <a className="m-btn block" href={`/status/${view.order.code}`}><MIcon d={I.receipt} size={18} />Lihat &amp; unduh nota</a>
   );
@@ -278,7 +279,7 @@ export default function OrderPage() {
                 <span className="m-lab">{machine.code ? `Kiosk #${machine.code}` : machine.name} terkunci sementara</span>
                 <span className="m-badge sec">Reserved</span>
               </div>
-              <p>Mesin dijaga untuk antreanmu. Selesaikan scan QRIS di layar mesin sebelum waktu habis.</p>
+              <p>Mesin dijaga untuk antreanmu. Selesaikan pembayaran sebelum waktu habis.</p>
             </div>
           </div>
           <div className="m-card m-cd">
@@ -289,11 +290,22 @@ export default function OrderPage() {
           <div className="m-card md m-stack m-center">
             <div className="m-cap">Total tagihan</div>
             <div className="m-bigcode m-num">{formatRupiah(view.order.total)}</div>
-            <ol className="m-steps-l">
-              <li>Buka e-wallet atau m-banking di HP ini (GoPay, OVO, Dana, ShopeePay, BCA Mobile, dll).</li>
-              <li>Pilih <b>Scan / Bayar</b>, lalu arahkan kamera ke <b>QRIS di layar mesin</b>.</li>
-              <li>Setelah berhasil, halaman ini berubah otomatis dan notamu bisa diunduh.</li>
-            </ol>
+            {data?.payUrl ? (
+              <>
+                <a className="m-btn block" href={data.payUrl}><MIcon d={I.lock} size={18} />Pilih metode pembayaran</a>
+                <ol className="m-steps-l">
+                  <li>Tekan tombol di atas (atau scan QR di layar mesin dengan kamera HP).</li>
+                  <li>Pilih metode: transfer VA bank, e-wallet, QRIS, atau kartu.</li>
+                  <li>Setelah berhasil, halaman ini berubah otomatis dan notamu bisa diunduh.</li>
+                </ol>
+              </>
+            ) : (
+              <ol className="m-steps-l">
+                <li>Buka e-wallet atau m-banking di HP ini (GoPay, OVO, Dana, ShopeePay, BCA Mobile, dll).</li>
+                <li>Pilih <b>Scan / Bayar</b>, lalu arahkan kamera ke <b>QRIS di layar mesin</b>.</li>
+                <li>Setelah berhasil, halaman ini berubah otomatis dan notamu bisa diunduh.</li>
+              </ol>
+            )}
           </div>
           <div className="m-livepill"><span className="m-spin" /><span>Menunggu konfirmasi pembayaran... (otomatis mendeteksi)</span></div>
           <div className="m-card">
