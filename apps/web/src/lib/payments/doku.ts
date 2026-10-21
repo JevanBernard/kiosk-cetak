@@ -1,84 +1,129 @@
-import { createHash, createHmac } from "node:crypto";
-import { randomToken, safeEqual } from "../crypto";
+import { createHash, createHmac, createSign, randomInt } from "node:crypto";
 import type { PaymentProvider } from "./index";
 
 /**
- * Penyedia DOKU (QRIS dinamis).
+ * DOKU SNAP QRIS (host-to-host).
+ *  - Token B2B : POST /authorization/v1/access-token/b2b (signature RSA-SHA256 "clientId|timestamp") [dari standar SNAP, tidak ada di dokumen yang ditempel: verifikasi di sandbox]
+ *  - Generate  : POST /snap-adapter/b2b/v1.0/qr/qr-mpm-generate
+ *  - Query     : POST /snap-adapter/b2b/v1.0/qr/qr-mpm-query (serviceCode 47)
+ *  - Signature request bisnis: base64(HMAC_SHA512(clientSecret, "POST:path:accessToken:sha256hex(body):timestamp"))
  *
- * PERHATIAN: ini kerangka yang mengikuti skema tanda tangan HMAC "non-SNAP" DOKU
- * (Client-Id, Request-Id, Request-Timestamp, Request-Target, Digest). Akun QRIS merchant
- * belum aktif saat kode ini ditulis (PRD bagian 5), jadi path endpoint dan bentuk body di bawah
- * HARUS dicocokkan dengan dokumentasi DOKU terbaru (apakah memakai SNAP QRIS atau tidak) dan diuji
- * di sandbox sebelum dipakai. Path dapat diubah lewat env tanpa mengubah kode.
+ * Notifikasi pembayaran dikonfirmasi dengan memanggil Query QRIS, sehingga webhook palsu tidak bisa
+ * melunasi order walau signature notifikasi tidak diverifikasi.
  */
 const BASE = () => process.env.DOKU_BASE_URL ?? "https://api-sandbox.doku.com";
 const CLIENT_ID = () => process.env.DOKU_CLIENT_ID ?? "";
 const SECRET = () => process.env.DOKU_SECRET_KEY ?? "";
-const GENERATE_PATH = () => process.env.DOKU_QRIS_GENERATE_PATH ?? "/qris/v1/generate"; // TODO(verify)
-const STATUS_PATH = () => process.env.DOKU_QRIS_STATUS_PATH ?? "/qris/v1/status"; // TODO(verify)
+const MERCHANT_ID = () => process.env.DOKU_MERCHANT_ID ?? "";
+const TERMINAL_ID = () => process.env.DOKU_TERMINAL_ID ?? "T0001";
+const POSTAL = () => process.env.DOKU_POSTAL_CODE ?? "10110";
+const PRIVATE_KEY = () => (process.env.DOKU_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
+const TOKEN_PATH = "/authorization/v1/access-token/b2b";
 
-function digestOf(body: string) {
-  return createHash("sha256").update(body).digest("base64");
+/** Format SNAP: YYYY-MM-DDTHH:mm:ss+07:00 (WIB). */
+function wib(d = new Date()): string {
+  const s = new Date(d.getTime() + 7 * 3600_000).toISOString().replace(/\.\d{3}Z$/, "");
+  return s + "+07:00";
 }
 
-function sign(requestId: string, timestamp: string, target: string, body: string) {
-  const component =
-    `Client-Id:${CLIENT_ID()}\nRequest-Id:${requestId}\nRequest-Timestamp:${timestamp}\n` +
-    `Request-Target:${target}` +
-    (body ? `\nDigest:${digestOf(body)}` : "");
-  return "HMACSHA256=" + createHmac("sha256", SECRET()).update(component).digest("base64");
+const rupiah = (n: number) => `${n}.00`;
+const sha256Hex = (s: string) => createHash("sha256").update(s).digest("hex");
+
+let cached: { token: string; exp: number } | null = null;
+
+async function accessToken(): Promise<string> {
+  if (cached && cached.exp > Date.now() + 30_000) return cached.token;
+  const timestamp = wib();
+  const signature = createSign("RSA-SHA256").update(`${CLIENT_ID()}|${timestamp}`).sign(PRIVATE_KEY(), "base64");
+  const res = await fetch(BASE() + TOKEN_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json", "X-CLIENT-KEY": CLIENT_ID(), "X-TIMESTAMP": timestamp, "X-SIGNATURE": signature },
+    body: JSON.stringify({ grantType: "client_credentials" }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok || !json.accessToken) throw new Error(`DOKU token gagal (${res.status} ${json.responseCode ?? ""} ${json.responseMessage ?? ""})`);
+  cached = { token: json.accessToken, exp: Date.now() + (Number(json.expiresIn) || 900) * 1000 };
+  return cached.token;
 }
 
-async function call(path: string, payload: unknown) {
-  const body = JSON.stringify(payload);
-  const requestId = randomToken(12);
-  const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+async function call(path: string, payload: unknown): Promise<any> {
+  const token = await accessToken();
+  const body = JSON.stringify(payload); // JSON.stringify tanpa spasi = minify
+  const timestamp = wib();
+  const stringToSign = `POST:${path}:${token}:${sha256Hex(body)}:${timestamp}`;
+  const signature = createHmac("sha512", SECRET()).update(stringToSign).digest("base64");
   const res = await fetch(BASE() + path, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "Client-Id": CLIENT_ID(),
-      "Request-Id": requestId,
-      "Request-Timestamp": timestamp,
-      Signature: sign(requestId, timestamp, path, body),
+      Authorization: `Bearer ${token}`,
+      "X-PARTNER-ID": CLIENT_ID(),
+      "X-EXTERNAL-ID": `${Date.now()}${String(randomInt(1000)).padStart(3, "0")}`,
+      "X-TIMESTAMP": timestamp,
+      "X-SIGNATURE": signature,
+      "CHANNEL-ID": "H2H",
     },
     body,
+    signal: AbortSignal.timeout(20_000),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`DOKU ${path} gagal (${res.status})`);
-  return json as Record<string, any>;
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok && !json.responseCode) throw new Error(`DOKU ${path} gagal (${res.status})`);
+  return json;
+}
+
+async function query(partnerRef: string, referenceNo: string) {
+  const json = await call("/snap-adapter/b2b/v1.0/qr/qr-mpm-query", {
+    originalReferenceNo: referenceNo,
+    originalPartnerReferenceNo: partnerRef,
+    serviceCode: "47",
+    merchantId: MERCHANT_ID(),
+  });
+  // latestTransactionStatus "00" = sukses (SNAP)
+  const paid = json.latestTransactionStatus === "00";
+  const amount = Number.parseFloat(json.amount?.value ?? "");
+  return { paid, amount: Number.isFinite(amount) ? Math.round(amount) : undefined };
 }
 
 export const dokuProvider: PaymentProvider = {
   name: "doku",
-  async createQr({ orderId, code, amount, expiresAt }) {
-    const providerRef = `KC-${code}`;
-    const json = await call(GENERATE_PATH(), {
-      order: { invoice_number: providerRef, amount },
-      qr: { expired_time: Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60000)) },
-      additional_info: { order_id: orderId },
+  async createQr({ code, amount, expiresAt }) {
+    const providerRef = `KC-${code}`; // partnerReferenceNo (maks 64)
+    const json = await call("/snap-adapter/b2b/v1.0/qr/qr-mpm-generate", {
+      partnerReferenceNo: providerRef,
+      amount: { value: rupiah(amount), currency: "IDR" },
+      merchantId: MERCHANT_ID(),
+      terminalId: TERMINAL_ID(),
+      validityPeriod: wib(expiresAt),
+      additionalInfo: { postalCode: POSTAL(), feeType: "1" },
     });
-    const qrString = json.qr_string ?? json.qrContent ?? json.response?.qr_string;
-    if (!qrString) throw new Error("DOKU tidak mengembalikan string QR");
-    return { providerRef, qrString, raw: { id: json.id ?? null } };
+    // 2004700 = sukses generate
+    if (json.responseCode !== "2004700" || !json.qrContent) {
+      throw new Error(`DOKU generate gagal: ${json.responseCode} ${json.responseMessage}`);
+    }
+    return { providerRef, qrString: json.qrContent, raw: { referenceNo: json.referenceNo } };
   },
-  parseWebhook(headers, rawBody, path) {
-    const clientId = headers.get("client-id") ?? "";
-    const requestId = headers.get("request-id") ?? "";
-    const timestamp = headers.get("request-timestamp") ?? "";
-    const given = headers.get("signature") ?? "";
-    if (!clientId || clientId !== CLIENT_ID() || !given) return null;
-    if (!safeEqual(given, sign(requestId, timestamp, path, rawBody))) return null;
-    const b = JSON.parse(rawBody);
-    const ref = b.order?.invoice_number ?? b.invoice_number;
-    const amount = Number(b.order?.amount ?? b.amount);
-    const status = String(b.transaction?.status ?? b.status ?? "").toUpperCase();
-    if (!ref || !Number.isFinite(amount)) return null;
-    return { providerRef: ref, amount, paid: status === "SUCCESS" || status === "PAID" };
+
+  /**
+   * Notifikasi DOKU memuat originalPartnerReferenceNo. Isinya tidak dipercaya mentah: status dan
+   * nominal diambil ulang dari Query QRIS.
+   */
+  async parseWebhook(_headers, rawBody, _path, lookup) {
+    let b: any;
+    try {
+      b = JSON.parse(rawBody);
+    } catch {
+      return null;
+    }
+    const partnerRef: string | undefined = b.originalPartnerReferenceNo ?? b.partnerReferenceNo;
+    if (!partnerRef || !lookup) return null;
+    const known = await lookup(partnerRef);
+    if (!known) return null;
+    const q = await query(partnerRef, known.referenceNo ?? b.originalReferenceNo ?? "");
+    return { providerRef: partnerRef, amount: q.amount ?? known.amount, paid: q.paid };
   },
-  async checkStatus(providerRef) {
-    const json = await call(STATUS_PATH(), { invoice_number: providerRef });
-    const status = String(json.transaction?.status ?? json.status ?? "").toUpperCase();
-    return { paid: status === "SUCCESS" || status === "PAID", amount: Number(json.order?.amount ?? json.amount) || undefined };
+
+  async checkStatus(providerRef, raw) {
+    return query(providerRef, raw?.referenceNo ?? "");
   },
 };

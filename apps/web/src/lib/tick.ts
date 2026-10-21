@@ -75,11 +75,11 @@ export async function runTick() {
   }
 
   // 7. Rekonsiliasi pembayaran yang webhooknya terlambat (FR-PAY-06)
-  const { data: pending } = await db().from("payments").select("provider_ref, amount").eq("status", "pending").gt("created_at", iso(15 * MIN)).limit(20);
+  const { data: pending } = await db().from("payments").select("provider_ref, amount, raw").eq("status", "pending").gt("created_at", iso(15 * MIN)).limit(20);
   const provider = getProvider();
   for (const p of pending ?? []) {
     try {
-      const s = await provider.checkStatus(p.provider_ref);
+      const s = await provider.checkStatus(p.provider_ref, p.raw);
       if (s.paid) await db().rpc("confirm_payment", { p_ref: p.provider_ref, p_amount: s.amount ?? p.amount, p_raw: { via: "reconcile" } });
     } catch (e) {
       console.error("[reconcile]", e);

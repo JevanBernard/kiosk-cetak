@@ -15,7 +15,7 @@ export const mockProvider: PaymentProvider = {
     const providerRef = `MOCK-${randomToken(9)}`;
     return { providerRef, qrString: `MOCKQRIS|${providerRef}|${amount}|${code}` };
   },
-  parseWebhook(headers, rawBody) {
+  async parseWebhook(headers, rawBody) {
     const sig = headers.get(MOCK_SIGNATURE_HEADER) ?? "";
     if (!sig || !safeEqual(sig, mockSign(rawBody))) return null;
     const b = JSON.parse(rawBody) as { ref: string; amount: number };

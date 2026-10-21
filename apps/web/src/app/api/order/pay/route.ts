@@ -50,7 +50,7 @@ export const POST = handler(async () => {
     const provider = getProvider();
     const qr = await provider.createQr({ orderId: order.id, code: order.code, amount: view.totals.total, expiresAt });
     const cfg = toPriceConfig(settings);
-    await db().from("payments").insert({
+    const { error: payErr } = await db().from("payments").insert({
       order_id: order.id,
       provider: provider.name,
       provider_ref: qr.providerRef,
@@ -59,6 +59,7 @@ export const POST = handler(async () => {
       raw: qr.raw ?? null,
       expires_at: expiresAt.toISOString(),
     });
+    if (payErr) throw payErr; // jangan tampilkan QR bila pembayaran tidak tercatat
     for (const f of view.files) await db().from("order_files").update({ sides: f.sides, price: f.price }).eq("id", f.id);
     await setOrderStatus(order.id, "MENUNGGU_BAYAR", {
       total: view.totals.total,
