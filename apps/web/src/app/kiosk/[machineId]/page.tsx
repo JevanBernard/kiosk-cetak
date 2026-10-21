@@ -70,7 +70,7 @@ export default function KioskPage({ params }: { params: { machineId: string } })
   const [s, setS] = useState<KioskState | null>(null);
   const [qrImg, setQrImg] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0); // 0 saat render server: jam server (UTC) beda dengan jam layar, jadi diisi setelah mount
   const [dismissed, setDismissed] = useState<string | null>(null); // kode transaksi yang layar "Selesai"-nya sudah ditutup
 
   const [keyRaw, setKey] = useState<string | null>(null); // null = belum dibaca dari URL
@@ -102,6 +102,7 @@ export default function KioskPage({ params }: { params: { machineId: string } })
   }
 
   useEffect(() => {
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(t);
   }, []);
@@ -124,7 +125,7 @@ export default function KioskPage({ params }: { params: { machineId: string } })
     return () => document.removeEventListener("contextmenu", block);
   }, []);
 
-  const clock = new Date(now).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }).replace(".", ":");
+  const clock = now ? new Date(now).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).replace(".", ":") : "--:--";
   const termLabel = s?.code ? `Terminal #${s.code}` : s?.name ?? "Kiosk";
   const hw = s?.hardware;
   const paperPct = hw ? Math.round((hw.paperLeft / Math.max(1, hw.paperCapacity)) * 100) : 0;
@@ -164,7 +165,7 @@ export default function KioskPage({ params }: { params: { machineId: string } })
     <footer className="k-foot">
       <div className="k-foot-in">
         <span><Icon d={ICONS.shield} size={18} />Transaksi aman terenkripsi QRIS{s?.code ? ` • Kiosk ID: PM-${s.code}` : ""}</span>
-        <span>© {new Date(now).getFullYear()} PaperMate</span>
+        <span>© {now ? new Date(now).getFullYear() : ""} PaperMate</span>
       </div>
     </footer>
   );
