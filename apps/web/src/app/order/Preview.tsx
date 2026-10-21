@@ -9,8 +9,9 @@ const A4 = 210 / 297;
 /**
  * Preview per sisi kertas, dirender di browser (FR-OPT-04): memperhitungkan rentang, N-up,
  * orientasi, dan hitam-putih. Mengunduh PDF lewat URL bertanda tangan berumur 5 menit.
+ * `endpoint` mengembalikan {url}; `zoom` memperbesar kanvas untuk layar kiosk.
  */
-export default function Preview({ fileId, pages, options, kind }: { fileId: string; pages: number; options: PrintOptions; kind: string }) {
+export default function Preview({ endpoint, fileId, pages, options, kind, zoom = 1 }: { endpoint: string; fileId: string; pages: number; options: PrintOptions; kind: string; zoom?: number }) {
   const [doc, setDoc] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [show, setShow] = useState(4);
@@ -21,7 +22,7 @@ export default function Preview({ fileId, pages, options, kind }: { fileId: stri
     let dead = false;
     (async () => {
       try {
-        const { url } = await api<{ url: string }>(`/api/order/files/${fileId}/preview`);
+        const { url } = await api<{ url: string }>(endpoint);
         const pdfjs: any = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
         const d = await pdfjs.getDocument({ url }).promise;
@@ -52,8 +53,8 @@ export default function Preview({ fileId, pages, options, kind }: { fileId: stri
     root.innerHTML = "";
     (async () => {
       const landscape = options.orientation === "landscape";
-      const W = landscape ? 300 : 212;
-      const H = landscape ? 212 : 300;
+      const W = (landscape ? 300 : 212) * zoom;
+      const H = (landscape ? 212 : 300) * zoom;
       const { cols, rows } = nupGrid(options.nup, options.orientation);
       const n = Math.min(sheetCount, show);
       for (let s = 0; s < n; s++) {

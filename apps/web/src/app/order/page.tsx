@@ -1,17 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
-import {
-  MAX_FILE_BYTES,
-  NUP_VALUES,
-  formatRupiah,
-  kindFromMime,
-  priceFile,
-  type PriceConfig,
-  type PrintOptions,
-} from "@kioskcetak/shared";
+import { MAX_FILE_BYTES, formatRupiah, kindFromMime } from "@kioskcetak/shared";
 import { ApiError, STATUS_LABEL, api, fmtTime } from "@/lib/client";
-import Preview from "./Preview";
 
 type FileView = {
   id: string;
@@ -20,24 +10,14 @@ type FileView = {
   status: string;
   error: string | null;
   pages: number | null;
-  options: PrintOptions | null;
-  sides: number | null;
-  price: number | null;
-  optionError: string | null;
 };
 type OrderData = {
-  machine: { name: string; availability: { state: "available" | "busy" | "unavailable"; reason: string | null }; whatsapp: string | null; capabilities: { duplex: boolean; color: boolean } };
-  config: PriceConfig;
+  machine: { name: string; availability: { state: "available" | "busy" | "unavailable"; reason: string | null }; whatsapp: string | null };
   view: null | {
-    order: { code: string; status: string; pay_expires_at: string | null; total: number };
+    order: { code: string; status: string; pay_expires_at: string | null; total: number; paid_at: string | null };
     files: FileView[];
-    totals: { subtotal: number; total: number; rounding: number };
-    estimateSeconds: number;
-    ready: boolean;
-    minTotal: number;
   };
 };
-type Qr = { qrString: string; amount: number; expiresAt: string; code: string };
 type Upload = { key: string; name: string; progress: number; error?: string };
 
 const DRAFT = ["DIBUAT", "DIUPLOAD", "DIATUR"];
@@ -71,17 +51,16 @@ function putFile(url: string, file: File, onProgress: (p: number) => void): Prom
   });
 }
 
+/**
+ * Halaman HP: hanya untuk mengunggah dokumen, lalu (setelah pembayaran) mengunduh nota.
+ * Preview, pengaturan cetak, ringkasan harga, dan QRIS ada di layar kiosk.
+ */
 export default function OrderPage() {
   const [data, setData] = useState<OrderData | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [uploads, setUploads] = useState<Upload[]>([]);
-  const [qr, setQr] = useState<Qr | null>(null);
-  const [qrImg, setQrImg] = useState("");
   const [now, setNow] = useState(Date.now());
-  const [payErr, setPayErr] = useState<string | null>(null);
-  const [paying, setPaying] = useState(false);
-  const [fileState, setFileState] = useState<Record<string, "ok" | "saving" | "invalid">>({});
   const fileInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -121,18 +100,6 @@ export default function OrderPage() {
     return () => clearInterval(t);
   }, []);
 
-  // Muat ulang QR bila halaman dibuka lagi saat masih menunggu bayar (pay idempoten pada order yang sama)
-  useEffect(() => {
-    if (status === "MENUNGGU_BAYAR" && !qr) {
-      api<Qr>("/api/order/pay", { method: "POST" }).then(setQr).catch(() => {});
-    }
-    if (status !== "MENUNGGU_BAYAR" && qr) setQr(null);
-  }, [status, qr]);
-
-  useEffect(() => {
-    if (qr) QRCode.toDataURL(qr.qrString, { margin: 1, width: 640, errorCorrectionLevel: "M" }).then(setQrImg);
-  }, [qr]);
-
   async function uploadAll(list: FileList | null) {
     if (!list || !data) return;
     for (const file of Array.from(list)) {
@@ -156,35 +123,20 @@ export default function OrderPage() {
     if (fileInput.current) fileInput.current.value = "";
   }
 
-  async function pay() {
-    setPaying(true);
-    setPayErr(null);
-    try {
-      setQr(await api<Qr>("/api/order/pay", { method: "POST" }));
-      await refresh();
-    } catch (e: any) {
-      setPayErr(e.message);
-      await refresh();
-    } finally {
-      setPaying(false);
-    }
+  async function removeFile(id: string) {
+    await api(`/api/order/files/${id}`, { method: "DELETE" }).catch(() => {});
+    await refresh();
   }
 
   async function cancel() {
     if (!confirm("Batalkan order ini?")) return;
     await api("/api/order/cancel", { method: "POST" }).catch((e) => alert(e.message));
-    setQr(null);
     await refresh();
   }
-
-  const reportFile = useCallback((id: string, s: "ok" | "saving" | "invalid") => {
-    setFileState((m) => (m[id] === s ? m : { ...m, [id]: s }));
-  }, []);
 
   const view = data?.view ?? null;
   const avail = data?.machine.availability;
   const draft = !!status && DRAFT.includes(status);
-  const blocked = Object.values(fileState).some((s) => s !== "ok");
   const waLink = useMemo(() => {
     if (!data?.machine.whatsapp || !view) return null;
     return `https://wa.me/${data.machine.whatsapp}?text=${encodeURIComponent(`Halo, saya mau lapor masalah cetak. Kode transaksi: ${view.order.code}`)}`;
@@ -205,6 +157,9 @@ export default function OrderPage() {
   const canStartNew = !view || ["SELESAI", "KEDALUWARSA", "DIBATALKAN", "DIREFUND"].includes(status!);
   const showUploader = draft || (canStartNew && avail?.state === "available");
   const secondsLeft = view?.order.pay_expires_at ? (new Date(view.order.pay_expires_at).getTime() - now) / 1000 : 0;
+  const receiptBtn = view && (
+    <a className="btn primary block" href={`/status/${view.order.code}`}>Lihat &amp; unduh nota</a>
+  );
 
   return (
     <main className="wrap">
@@ -213,7 +168,7 @@ export default function OrderPage() {
         <span className={`pill ${avail?.state === "available" ? "ok" : avail?.state === "busy" ? "warn" : "bad"}`}>{data.machine.name}</span>
       </div>
 
-      {avail && avail.state !== "available" && !PRINTING.includes(status ?? "") && status !== "MENUNGGU_BAYAR" && (
+      {avail && avail.state !== "available" && !PRINTING.includes(status ?? "") && status !== "MENUNGGU_BAYAR" && !draft && (
         <div className={`banner ${avail.state === "busy" ? "warn" : "bad"}`}>
           <b>{avail.state === "busy" ? "Mesin sedang dipakai" : "Mesin tidak tersedia"}</b>
           <div>{avail.reason}</div>
@@ -228,7 +183,7 @@ export default function OrderPage() {
           <p><b>Ambil dokumen di nampan.</b></p>
           <p className="muted">Kode transaksi</p>
           <div className="big">{view.order.code}</div>
-          <a className="btn primary" href={`/status/${view.order.code}`}>Lihat struk</a>
+          {receiptBtn}
           <p className="muted">Dokumenmu sudah dihapus dari sistem.</p>
         </div>
       )}
@@ -253,22 +208,22 @@ export default function OrderPage() {
             {status === "CETAK_ULANG" && "Ada kendala pada printer. Sistem mencoba mencetak ulang otomatis."}
           </p>
           <p>Kode transaksi: <b>{view.order.code}</b></p>
+          {receiptBtn}
         </div>
       )}
 
-      {/* Menunggu pembayaran */}
+      {/* Menunggu pembayaran: QRIS ada di layar kiosk */}
       {status === "MENUNGGU_BAYAR" && view && (
         <div className="card stack" style={{ textAlign: "center" }}>
-          <h2>Scan untuk bayar (QRIS)</h2>
-          {qrImg ? <img className="qr" src={qrImg} alt="QRIS" /> : <p className="muted">Menyiapkan QR...</p>}
+          <h2>Bayar lewat QRIS di layar mesin</h2>
           <div className="big">{formatRupiah(view.order.total)}</div>
           <div className={secondsLeft < 60 ? "err" : "muted"}>Sisa waktu <b>{fmtTime(secondsLeft)}</b></div>
-          <p className="muted">Setelah bayar, halaman ini berubah otomatis. Kode transaksi: <b>{view.order.code}</b></p>
-          {qr?.qrString.startsWith("MOCKQRIS") && (
-            <button className="block" onClick={() => api("/api/dev/mock-pay", { method: "POST", json: { code: view.order.code } }).then(refresh).catch((e) => alert(e.message))}>
-              Simulasi bayar (mode uji)
-            </button>
-          )}
+          <ol className="muted" style={{ textAlign: "left", paddingLeft: 20, margin: 0 }}>
+            <li>Buka aplikasi e-wallet atau m-banking di HP ini (GoPay, OVO, Dana, ShopeePay, dll).</li>
+            <li>Pilih <b>Scan / Bayar</b>, lalu arahkan kamera ke QRIS di layar mesin.</li>
+            <li>Setelah berhasil, halaman ini berubah otomatis dan notamu bisa diunduh.</li>
+          </ol>
+          <p className="muted">Kode transaksi: <b>{view.order.code}</b></p>
           <button className="block danger" onClick={cancel}>Batalkan order</button>
         </div>
       )}
@@ -276,7 +231,7 @@ export default function OrderPage() {
       {/* Upload */}
       {showUploader && (
         <div className="card stack">
-          <h2>1. Upload dokumen</h2>
+          <h2>Upload dokumen</h2>
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "var(--ink)" }}>
             <input type="checkbox" style={{ width: 22, minHeight: 22, marginTop: 2 }} checked={consent} onChange={(e) => setConsent(e.target.checked)} />
             <span>Saya setuju dengan <a href="/terms" target="_blank">Syarat Penggunaan</a> dan <a href="/privacy" target="_blank">Kebijakan Privasi</a>. Dokumen dihapus otomatis setelah dicetak.</span>
@@ -293,35 +248,29 @@ export default function OrderPage() {
         </div>
       )}
 
-      {/* Daftar file + opsi */}
-      {draft && view && view.files.map((f) => (
-        <FileCard key={f.id} file={f} config={data.config} caps={data.machine.capabilities} report={reportFile} onChanged={refresh} />
-      ))}
-
-      {/* Ringkasan + bayar */}
+      {/* Daftar file terunggah */}
       {draft && view && view.files.length > 0 && (
         <div className="card stack">
-          <h2>Rincian biaya</h2>
-          {view.files.filter((f) => f.price !== null).map((f) => (
-            <div className="row between" key={f.id}>
-              <span className="grow" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-              <span className="price">{formatRupiah(f.price!)}</span>
+          <h2>Dokumen terunggah</h2>
+          {view.files.map((f) => (
+            <div key={f.id} className="row between">
+              <div className="grow" style={{ overflow: "hidden" }}>
+                <b style={{ overflowWrap: "anywhere" }}>{f.name}</b>
+                <div className={f.status === "error" ? "err" : "muted"}>
+                  {f.status === "ready" && `Siap · ${f.pages} halaman`}
+                  {f.status === "error" && (f.error ?? "File tidak dapat diproses. Simpan sebagai PDF (tanpa password), lalu unggah ulang.")}
+                  {["pending", "uploaded", "processing"].includes(f.status) && (f.kind === "docx" || f.kind === "pptx" ? "Mengonversi ke PDF..." : "Memproses file...")}
+                </div>
+              </div>
+              <button className="small danger" onClick={() => removeFile(f.id)}>Hapus</button>
             </div>
           ))}
-          {view.totals.rounding > 0 && <div className="row between muted"><span>Pembulatan</span><span>{formatRupiah(view.totals.rounding)}</span></div>}
-          <div className="row between"><b>Total</b><span className="big">{formatRupiah(view.totals.total)}</span></div>
-          {view.ready && <div className="muted">Perkiraan waktu cetak: {Math.max(1, Math.round(view.estimateSeconds / 60))} menit</div>}
-          {view.ready && view.totals.total < view.minTotal && <div className="err">Total minimal {formatRupiah(view.minTotal)}.</div>}
-          {payErr && <div className="banner bad">{payErr}</div>}
-          {avail?.state === "busy" && <div className="banner warn">Mesin sedang dipakai pengguna lain. Tombol bayar aktif otomatis saat mesin tersedia.</div>}
-          <button
-            className="primary block"
-            disabled={paying || !view.ready || blocked || avail?.state !== "available" || view.totals.total < view.minTotal}
-            onClick={pay}
-          >
-            {paying ? "Menyiapkan..." : `Bayar ${formatRupiah(view.totals.total)}`}
-          </button>
-          <div className="muted">Harga dikunci saat QR pembayaran muncul. Kamu punya 5 menit untuk membayar.</div>
+        </div>
+      )}
+      {draft && view && (
+        <div className="banner stack">
+          <b>Lanjutkan di layar mesin.</b>
+          <div>Atur warna dan jumlah salinan, lihat preview serta harga di layar mesin, lalu bayar dengan QRIS. Kamu bisa menambah file dari HP ini sebelum membayar.</div>
           <button className="block danger" onClick={cancel}>Batalkan order</button>
         </div>
       )}
@@ -332,154 +281,5 @@ export default function OrderPage() {
         </p>
       )}
     </main>
-  );
-}
-
-function FileCard({
-  file, config, caps, report, onChanged,
-}: {
-  file: FileView;
-  config: PriceConfig;
-  caps: { duplex: boolean; color: boolean };
-  report: (id: string, s: "ok" | "saving" | "invalid") => void;
-  onChanged: () => Promise<void> | void;
-}) {
-  const [opts, setOpts] = useState<PrintOptions | null>(file.options);
-  const [showPreview, setShowPreview] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  const ready = file.status === "ready" && !!file.pages && !!opts;
-
-  useEffect(() => {
-    if (!opts && file.options) setOpts(file.options); // opsi default tiba setelah file selesai diproses
-  }, [file.options, opts]);
-
-  const priced = ready ? priceFile(opts!, file.pages!, config) : null;
-  const error = priced && "error" in priced ? priced.error : null;
-
-  useEffect(() => {
-    if (!ready) report(file.id, "saving");
-    return () => report(file.id, "ok");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, file.id]);
-
-  function change(patch: Partial<PrintOptions>) {
-    const next = { ...opts!, ...patch };
-    setOpts(next);
-    clearTimeout(timer.current);
-    const r = priceFile(next, file.pages!, config);
-    if ("error" in r) {
-      report(file.id, "invalid");
-      return;
-    }
-    report(file.id, "saving");
-    timer.current = setTimeout(async () => {
-      try {
-        await api(`/api/order/files/${file.id}`, { method: "PUT", json: next });
-        await onChanged();
-        report(file.id, "ok");
-      } catch {
-        report(file.id, "invalid");
-      }
-    }, 350);
-  }
-
-  async function remove() {
-    await api(`/api/order/files/${file.id}`, { method: "DELETE" }).catch(() => {});
-    await onChanged();
-  }
-
-  const header = (
-    <div className="row between">
-      <div className="grow" style={{ overflow: "hidden" }}>
-        <b style={{ overflowWrap: "anywhere" }}>{file.name}</b>
-        {file.pages && <div className="muted">{file.pages} halaman</div>}
-      </div>
-      <button className="small danger" onClick={remove}>Hapus</button>
-    </div>
-  );
-
-  if (file.status === "error") {
-    return (
-      <div className="card stack">
-        {header}
-        <div className="banner bad">{file.error ?? "File tidak dapat diproses."}</div>
-        <div className="muted">Saran: buka dokumen, simpan sebagai PDF (tanpa password), lalu unggah ulang.</div>
-      </div>
-    );
-  }
-  if (!ready) {
-    return (
-      <div className="card stack">
-        {header}
-        <div className="muted">{file.kind === "docx" || file.kind === "pptx" ? "Mengonversi ke PDF..." : "Memproses file..."}</div>
-        <div className="bar"><i style={{ width: "60%" }} /></div>
-      </div>
-    );
-  }
-
-  const o = opts!;
-  const seg = (on: boolean, label: string, onClick: () => void, disabled = false, title?: string) => (
-    <button className={on ? "on" : ""} onClick={onClick} disabled={disabled} title={title}>{label}</button>
-  );
-  const colorOk = config.allow_color && caps.color;
-  const duplexOk = config.allow_duplex && caps.duplex;
-  const nupValues = config.allow_nup ? NUP_VALUES : [1 as const];
-
-  return (
-    <div className="card stack">
-      {header}
-      <div className="grid2">
-        <div>
-          <label>Warna</label>
-          <div className="seg">
-            {seg(!o.color, "Hitam-putih", () => change({ color: false }))}
-            {seg(o.color, "Warna", () => change({ color: true }), !colorOk, "Warna sedang tidak tersedia")}
-          </div>
-        </div>
-        <div>
-          <label>Sisi kertas</label>
-          <div className="seg">
-            {seg(!o.duplex, "1 sisi", () => change({ duplex: false }))}
-            {seg(o.duplex, "Bolak-balik", () => change({ duplex: true }), !duplexOk, "Bolak-balik sedang tidak tersedia")}
-          </div>
-        </div>
-      </div>
-      {(!colorOk || !duplexOk) && <div className="muted">{!colorOk && "Cetak warna sedang tidak tersedia. "}{!duplexOk && "Bolak-balik sedang tidak tersedia."}</div>}
-      <div className="grid2">
-        <div className="field">
-          <label>Salinan (maks {config.max_copies})</label>
-          <input type="number" inputMode="numeric" min={1} max={config.max_copies} value={o.copies} onChange={(e) => change({ copies: Math.trunc(Number(e.target.value)) || 0 })} />
-        </div>
-        <div className="field">
-          <label>Halaman per lembar</label>
-          <select value={o.nup} onChange={(e) => change({ nup: Number(e.target.value) as PrintOptions["nup"] })}>
-            {nupValues.map((n) => <option key={n} value={n}>{n === 1 ? "1 (normal)" : n}</option>)}
-          </select>
-        </div>
-      </div>
-      <div className="field">
-        <label>Halaman yang dicetak (kosong = semua)</label>
-        <input value={o.range} placeholder="Contoh: 1-3, 5, 8-10" onChange={(e) => change({ range: e.target.value })} />
-      </div>
-      <div className="field">
-        <label>Orientasi kertas</label>
-        <div className="seg">
-          {seg(o.orientation === "portrait", "Potret", () => change({ orientation: "portrait" }))}
-          {seg(o.orientation === "landscape", "Lanskap", () => change({ orientation: "landscape" }))}
-        </div>
-      </div>
-      {error ? (
-        <div className="err">{error}</div>
-      ) : (
-        priced && !("error" in priced) && (
-          <div className="row between">
-            <span className="muted">{priced.sides} sisi × {formatRupiah(priced.unitPrice)} × {o.copies} salinan</span>
-            <span className="price">{formatRupiah(priced.total)}</span>
-          </div>
-        )
-      )}
-      <button className="small" onClick={() => setShowPreview(!showPreview)}>{showPreview ? "Tutup preview" : "Lihat preview"}</button>
-      {showPreview && !error && <Preview fileId={file.id} pages={file.pages!} options={o} kind={file.kind} />}
-    </div>
   );
 }

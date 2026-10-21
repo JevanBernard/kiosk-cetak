@@ -40,9 +40,27 @@ export const PATCH = handler(async (req: Request, { params }: { params: { id: st
     const wa = String(b.admin_whatsapp).replace(/\D/g, "");
     patch.admin_whatsapp = wa || null;
   }
-  if (!Object.keys(patch).length) throw new HttpError(400, "Tidak ada perubahan.");
-  await db().from("machine_settings").update(patch).eq("machine_id", params.id);
-  await audit(admin, "settings.update", { machine: params.id, patch });
+  // Identitas mesin (tabel machines): nama, lokasi, kode unik seperti 001.
+  const identity: Record<string, unknown> = {};
+  if (b.name !== undefined) {
+    const name = String(b.name).trim().slice(0, 60);
+    if (!name) throw new HttpError(400, "Nama mesin wajib diisi.");
+    identity.name = name;
+  }
+  if (b.location !== undefined) identity.location = String(b.location).trim().slice(0, 120) || null;
+  if (b.code !== undefined) {
+    const code = String(b.code).trim().toUpperCase();
+    if (!/^[A-Z0-9-]{1,8}$/.test(code)) throw new HttpError(400, "Kode mesin 1-8 karakter: huruf, angka, atau tanda hubung.");
+    identity.code = code;
+  }
+  if (!Object.keys(patch).length && !Object.keys(identity).length) throw new HttpError(400, "Tidak ada perubahan.");
+  if (Object.keys(identity).length) {
+    const { error } = await db().from("machines").update(identity).eq("id", params.id);
+    if (error?.code === "23505") throw new HttpError(409, `Kode mesin ${identity.code} sudah dipakai.`);
+    if (error) throw new HttpError(500, "Gagal menyimpan identitas mesin.");
+  }
+  if (Object.keys(patch).length) await db().from("machine_settings").update(patch).eq("machine_id", params.id);
+  await audit(admin, "settings.update", { machine: params.id, patch: { ...patch, ...identity } });
   return ok();
 });
 

@@ -4,6 +4,7 @@ import { HttpError, clientIp, handler, ok, readJson } from "@/lib/http";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireSession } from "@/lib/session";
 import { ensureDraft } from "@/lib/user-order";
+import { touchOrder } from "@/lib/kiosk-order";
 import { logEvent } from "@/lib/orders";
 
 const MAX_FILES = 10;
@@ -46,6 +47,7 @@ export const POST = handler(async (req: Request) => {
   await db().from("order_files").update({ storage_path: path }).eq("id", file.id);
   const { data: signed, error: sErr } = await db().storage.from(BUCKET).createSignedUploadUrl(path);
   if (sErr || !signed) throw new HttpError(500, "Gagal menyiapkan unggahan.");
+  await touchOrder(order.id);
   await logEvent(order.id, "FILE_SLOT", `${kind} ${size}B`);
   return ok({ fileId: file.id, uploadUrl: signed.signedUrl });
 });

@@ -102,7 +102,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
 
       {st === "SELESAI" && <div className="banner ok">Dokumen sudah tercetak. Ambil di nampan mesin.</div>}
       {["LUNAS", "MENCETAK", "CETAK_ULANG"].includes(st) && <div className="banner">Sedang diproses. Halaman ini diperbarui otomatis.</div>}
-      {st === "MENUNGGU_BAYAR" && <div className="banner warn">Menunggu pembayaran. Lanjutkan di halaman order pada HP yang sama.</div>}
+      {st === "MENUNGGU_BAYAR" && <div className="banner warn">Menunggu pembayaran. Scan QRIS yang tampil di layar mesin dengan aplikasi e-wallet atau m-banking.</div>}
 
       {(st === "MENUNGGU_REFUND" || s.refund) && s.refund && (
         <div className="card stack hide-print">
@@ -123,7 +123,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
       )}
 
       <div className="row hide-print">
-        {paid && <button onClick={() => window.print()}>Simpan / cetak struk</button>}
+        {paid && <button onClick={() => window.print()}>Unduh nota (PDF)</button>}
         {wa && <a className="btn" href={wa} target="_blank" rel="noreferrer">Laporkan masalah</a>}
       </div>
     </main>

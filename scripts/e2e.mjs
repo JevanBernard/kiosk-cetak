@@ -52,20 +52,22 @@ step(`konfirmasi upload -> ${r.status}`);
 const ready = await until(async () => { const v = (await j("/api/order")).data.view; return v?.files[0]?.status === "ready" ? v : v?.files[0]?.status === "error" ? (() => { throw new Error(v.files[0].error); })() : null; }, "file ready");
 step(`file ready: ${ready.files[0].pages} halaman, status order ${ready.order.status}`);
 
-// 4. opsi: halaman 1-5, 2-up, bolak-balik, 2 salinan
-r = await j(`/api/order/files/${fileId}`, { method: "PUT", json: { color: false, duplex: true, copies: 2, range: "1-5", orientation: "portrait", nup: 2 } });
+// 4. opsi (kini dari layar kiosk): halaman 1-5, 2-up, bolak-balik, 2 salinan
+const kq = `?k=${key}`;
+r = await j(`/api/kiosk/${MID}/files/${fileId}${kq}`, { method: "PUT", json: { color: false, duplex: true, copies: 2, range: "1-5", orientation: "portrait", nup: 2 } });
 step(`opsi -> ${r.status} ${JSON.stringify(r.data)}  (ekspektasi: 3 sisi x 400 x 2 = 2400)`);
-r = await j("/api/order/files/" + fileId, { method: "PUT", json: { copies: 99 } });
+r = await j(`/api/kiosk/${MID}/files/${fileId}${kq}`, { method: "PUT", json: { copies: 99 } });
+step(`PUT dari HP sudah tidak ada: ${(await j("/api/order/files/" + fileId, { method: "PUT", json: {} })).status} (harus 405)`);
 step(`salinan 99 ditolak -> ${r.status} ${r.data.error}`);
 const view = (await j("/api/order")).data.view;
 step(`total: ${JSON.stringify(view.totals)} status=${view.order.status}`);
 
 // 5. bayar
-r = await j("/api/order/pay", { method: "POST" });
+r = await j(`/api/kiosk/${MID}/pay${kq}`, { method: "POST" });
 step(`bayar -> ${r.status} ${r.status === 200 ? r.data.qrString : JSON.stringify(r.data)}`);
 if (r.status !== 200) process.exit(1);
 const code = r.data.code;
-const r2 = await j("/api/order/pay", { method: "POST" });
+const r2 = await j(`/api/kiosk/${MID}/pay${kq}`, { method: "POST" });
 step(`bayar ulang idempoten -> sama QR: ${r2.data.qrString === r.data.qrString}`);
 k = (await j(`/api/kiosk/${MID}?k=${key}`)).data;
 step(`kiosk saat menunggu bayar: ${k.order?.status}, mesin=${k.availability.state}`);

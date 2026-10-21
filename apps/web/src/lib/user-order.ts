@@ -29,6 +29,14 @@ export async function ensureDraft(session: Session) {
   const { machine } = await loadMachine(session.machine_id);
   const a = availabilityOf(machine);
   if (a.state !== "available") throw new HttpError(409, a.reason ?? "Mesin tidak tersedia.", { code: "MACHINE_" + a.state.toUpperCase() });
+  // Layar kiosk hanya melayani satu HP sekali waktu: draft segar milik sesi lain mengklaim layar.
+  const { count: claimed } = await db()
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("machine_id", session.machine_id)
+    .in("status", DRAFT)
+    .gt("updated_at", new Date(Date.now() - 10 * 60_000).toISOString());
+  if (claimed) throw new HttpError(409, "Layar mesin sedang dipakai pengguna lain. Tunggu sebentar.", { code: "MACHINE_BUSY" });
   for (let i = 0; i < 5; i++) {
     const { data, error } = await db()
       .from("orders")

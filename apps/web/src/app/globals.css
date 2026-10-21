@@ -92,10 +92,3 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
   .card { border: 0; }
 }
 
-/* Layar kiosk */
-.kiosk { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; gap: 18px; user-select: none; cursor: default; }
-.kiosk h1 { font-size: clamp(1.8rem, 4vw, 3rem); }
-.kiosk .qr { width: min(60vh, 70vw); }
-.kiosk .steps { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-size: clamp(1rem, 2vw, 1.4rem); }
-.kiosk .steps span { background: var(--card); border: 1px solid var(--line); padding: 10px 16px; border-radius: 999px; }
-.kiosk .huge { font-size: clamp(3rem, 12vw, 8rem); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }

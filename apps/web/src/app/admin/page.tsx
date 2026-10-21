@@ -130,7 +130,7 @@ function Summary({ ov, reload }: { ov: Overview; reload: () => void }) {
         return (
           <div className="card stack" key={m.id}>
             <div className="row between">
-              <h2 style={{ margin: 0 }}>{m.name}</h2>
+              <h2 style={{ margin: 0 }}>{m.code ? `#${m.code} · ` : ""}{m.name}{m.location ? <span className="muted"> · {m.location}</span> : null}</h2>
               <span className={`pill ${stateClass(m.availability.state)}`}>{m.availability.state === "available" ? "Tersedia" : m.availability.state === "busy" ? "Dipakai" : "Tidak tersedia"}</span>
             </div>
             {m.availability.reason && <div className="muted">{m.availability.reason}</div>}
@@ -182,14 +182,16 @@ function Summary({ ov, reload }: { ov: Overview; reload: () => void }) {
 function CreateMachine({ reload }: { reload: () => void }) {
   const [name, setName] = useState("Mesin 1");
   const [location, setLocation] = useState("");
+  const [code, setCode] = useState("");
   return (
     <div className="card stack">
       <h2>Tambah mesin</h2>
       <div className="field"><label>Nama</label><input value={name} onChange={(e) => setName(e.target.value)} /></div>
+      <div className="field"><label>Kode mesin (kosongkan untuk otomatis: 001, 002, ...)</label><input value={code} maxLength={8} placeholder="001" onChange={(e) => setCode(e.target.value)} /></div>
       <div className="field"><label>Lokasi</label><input value={location} onChange={(e) => setLocation(e.target.value)} /></div>
       <button className="primary" onClick={async () => {
         try {
-          const r = await api<{ agentToken: string }>("/api/admin/machines", { method: "POST", json: { name, location } });
+          const r = await api<{ agentToken: string }>("/api/admin/machines", { method: "POST", json: { name, location, code } });
           alert("Token agent (simpan, hanya tampil sekali):\n\n" + r.agentToken);
           reload();
         } catch (e: any) { alert(e.message); }
@@ -348,8 +350,11 @@ function SettingsForm({ m, reload }: { m: Machine; reload: () => void }) {
   const set = (k: string, val: any) => setV((x) => ({ ...x, [k]: val }));
   return (
     <div className="card stack">
-      <h2>{m.name}</h2>
+      <h2>{m.code ? `#${m.code} · ` : ""}{m.name}</h2>
       <div className="grid2">
+        <div className="field"><label>Nama mesin</label><input value={v.name ?? m.name ?? ""} onChange={(e) => set("name", e.target.value)} /></div>
+        <div className="field"><label>Kode mesin (unik, mis. 001)</label><input value={v.code ?? m.code ?? ""} maxLength={8} onChange={(e) => set("code", e.target.value)} /></div>
+        <div className="field" style={{ gridColumn: "1 / -1" }}><label>Lokasi (tampil di layar kiosk)</label><input value={v.location ?? m.location ?? ""} placeholder="Perpustakaan Pusat Lt. 1" onChange={(e) => set("location", e.target.value)} /></div>
         {NUM_FIELDS.map(([k, label]) => (
           <div className="field" key={k}><label>{label}</label><input type="number" value={v[k] ?? ""} onChange={(e) => set(k, e.target.value === "" ? "" : Number(e.target.value))} /></div>
         ))}
