@@ -279,11 +279,14 @@ export function PayScreen({
             <div className="k-card md k-total"><small>Total bayar</small><b className="k-num">{formatRupiah(amount)}</b></div>
             <div className={`k-timer small k-num${left < 60 ? " low" : ""}`}>{fmtTime(left)}</div>
             {checkout ? (
+              <>
               <ol className="k-paysteps">
                 <li>Scan QR ini dengan <b>kamera HP</b>, atau tekan <b>Pilih metode pembayaran</b> di halaman HP Anda</li>
                 <li>Pilih metode: transfer VA bank, e-wallet, QRIS, atau kartu</li>
                 <li>Setelah berhasil, mesin langsung mencetak. Nota bisa diunduh di HP.</li>
               </ol>
+              <div className="k-alt"><b>Ada cara lain untuk membayar</b><span>Buka halaman <b>PaperMate</b> di HP Anda, lalu tekan <b>Pilih metode pembayaran</b>. Tersedia transfer VA bank, e-wallet, QRIS, dan kartu tanpa perlu scan layar ini.</span></div>
+              </>
             ) : (
               <ol className="k-paysteps">
                 <li>Buka GoPay, OVO, Dana, ShopeePay, atau m-banking di HP Anda</li>

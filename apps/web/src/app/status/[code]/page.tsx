@@ -4,6 +4,7 @@ import { formatRupiah } from "@kioskcetak/shared";
 import { ApiError, STATUS_LABEL, api } from "@/lib/client";
 import { I, MIcon, Shell, Stepper, useToast } from "../../mobile/ui";
 import { Brand } from "../../brand";
+import { renderReceiptPng } from "@/lib/receipt-canvas";
 
 type Status = {
   order: { code: string; status: string; total: number; created_at: string; paid_at: string | null; printed_at: string | null };
@@ -64,13 +65,87 @@ export default function StatusPage({ params }: { params: { code: string } }) {
     }
   }
 
+  const paidNow = s?.order.paid_at != null;
+  const imgKey = s ? [s.order.status, s.order.total, s.order.printed_at, s.files.length].join("|") : "";
+  const [img, setImg] = useState<File | null>(null);
+
+  // Gambar struk digambar di browser dari data yang sudah dimuat (tanpa server).
+  const buildImage = useCallback(async () => {
+    if (!s) return null;
+    const fam = getComputedStyle(document.querySelector(".m-root") ?? document.body).fontFamily;
+    const kiosk = s.machine ? `${s.machine.code ? `#${s.machine.code} ` : ""}${s.machine.name}${s.machine.location ? ` (${s.machine.location})` : ""}` : "-";
+    const meta: [string, string][] = [["Kiosk", kiosk], ["Dibuat", fmt(s.order.created_at)]];
+    if (s.order.paid_at) meta.push(["Dibayar", `${fmt(s.order.paid_at)} (${s.payment?.provider === "mock" ? "simulasi" : "QRIS"})`]);
+    if (s.order.printed_at) meta.push(["Tercetak", fmt(s.order.printed_at)]);
+    const blob = await renderReceiptPng({
+      code: s.order.code,
+      paid: s.order.paid_at !== null,
+      statusLabel: STATUS_LABEL[s.order.status] ?? s.order.status,
+      meta,
+      files: s.files.filter((f) => f.price !== null).map((f) => ({
+        name: f.name,
+        detail: `${f.pages ?? "?"} hal · ${f.sides ?? "-"} sisi · ${f.options?.color ? "warna" : "hitam-putih"} · ${f.options?.duplex ? "bolak-balik" : "1 sisi"} · ×${f.options?.copies ?? 1}`,
+        price: formatRupiah(f.price as number),
+      })),
+      rounding: s.totals.rounding > 0 ? formatRupiah(s.totals.rounding) : null,
+      totalLabel: s.order.paid_at ? "Total Terbayar" : "Total Tagihan",
+      total: formatRupiah(s.order.total || s.totals.total),
+      family: fam,
+    });
+    return new File([blob], `struk-papermate-${s.order.code}.png`, { type: "image/png" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imgKey]);
+
+  // Siapkan lebih dulu agar tombol Bagikan langsung membuka menu bagikan (butuh gestur pengguna yang masih segar).
+  useEffect(() => {
+    if (!paidNow) return;
+    let dead = false;
+    buildImage().then((f) => { if (f && !dead) setImg(f); }).catch(() => {});
+    return () => { dead = true; };
+  }, [paidNow, buildImage]);
+
+  async function getImage() {
+    if (img) return img;
+    try {
+      return await buildImage();
+    } catch {
+      return null;
+    }
+  }
+
+  async function saveImage() {
+    const f = await getImage();
+    if (!f) return showToast("Gambar struk belum bisa dibuat. Coba lagi.");
+    const url = URL.createObjectURL(f);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = f.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    showToast("Gambar struk disimpan.");
+  }
+
   async function share() {
-    const text = `Struk PaperMate ${code}${s ? ` · ${formatRupiah(s.order.total || s.totals.total)}` : ""}`;
+    const title = `Struk PaperMate ${code}`;
+    const text = `${title}${s ? ` · ${formatRupiah(s.order.total || s.totals.total)}` : ""}`;
+    const url = window.location.href;
+    const file = await getImage();
+    if (file && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ title, text: `${text}
+${url}`, files: [file] });
+        return;
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+      }
+    }
     if (navigator.share) {
-      await navigator.share({ title: `Struk PaperMate ${code}`, text, url: window.location.href }).catch(() => {});
+      await navigator.share({ title, text, url }).catch(() => {});
     } else {
       try {
-        await navigator.clipboard.writeText(window.location.href);
+        await navigator.clipboard.writeText(url);
         showToast("Tautan struk disalin!");
       } catch {
         showToast("Salin tautan dari bilah alamat.");
@@ -165,6 +240,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
           <div className="m-two m-hide-print">
             <button className="m-btn soft" onClick={() => window.print()}><MIcon d={I.download} size={18} />Unduh Struk</button>
             <button className="m-btn soft" onClick={share}><MIcon d={I.share} size={18} />Bagikan</button>
+            <button className="m-btn soft" style={{ gridColumn: "1 / -1" }} onClick={saveImage}><MIcon d={I.image} size={18} />Simpan sebagai Gambar</button>
           </div>
         )}
       </div>

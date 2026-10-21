@@ -37,7 +37,7 @@
 }
 .m-root * { box-sizing: border-box; }
 .m-root h1, .m-root h2, .m-root h3, .m-root p { margin: 0; }
-.m-root a { color: var(--m-primary-c); }
+.m-root a:not(.m-btn):not(.m-go) { color: var(--m-primary-c); }
 .m-root button { font: inherit; color: inherit; cursor: pointer; }
 .m-num { font-variant-numeric: tabular-nums; }
 .m-ico { flex: none; }
